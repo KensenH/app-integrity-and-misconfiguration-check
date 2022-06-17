@@ -4,6 +4,7 @@ metadata:
   name: {{ .Values.name }}
   namespace: default
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: {{ .Values.name }}
@@ -16,6 +17,8 @@ spec:
         - image: {{ .Values.image.name }}:{{ .Values.image.tag }}
           name: {{ .Values.name }}
           env:
+            - name: TLS
+              value: "true"
           volumeMounts:
             - name: tls
               mountPath: "/etc/admission-webhook/tls"
