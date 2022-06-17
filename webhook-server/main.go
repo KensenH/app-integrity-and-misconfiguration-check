@@ -1,166 +1,167 @@
 package main
 
 import (
-	"flag"
-	"fmt"
-	"io/ioutil"
-	"net/http"
-	"strings"
-
-	"github.com/rs/zerolog/log"
-	admission "k8s.io/api/admission/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+
+	"github.com/sirupsen/logrus"
+	"github.com/slackhq/simple-kubernetes-webhook/pkg/admission"
+	admissionv1 "k8s.io/api/admission/v1"
 )
-
-var (
-	runtimeScheme = runtime.NewScheme()
-	codecFactory  = serializer.NewCodecFactory(runtimeScheme)
-	deserializer  = codecFactory.UniversalDeserializer()
-)
-
-// add kind AdmissionReview in scheme
-func init() {
-	_ = corev1.AddToScheme(runtimeScheme)
-	_ = admission.AddToScheme(runtimeScheme)
-	_ = v1.AddToScheme(runtimeScheme)
-}
-
-type admitv1Func func(admission.AdmissionReview) *admission.AdmissionResponse
-
-type admitHandler struct {
-	v1 admitv1Func
-}
-
-func AdmitHandler(f admitv1Func) admitHandler {
-	return admitHandler{
-		v1: f,
-	}
-}
-
-// serve handles the http portion of a request prior to handing to an admit
-// function
-func serve(w http.ResponseWriter, r *http.Request, admit admitHandler) {
-	var body []byte
-	if r.Body != nil {
-		if data, err := ioutil.ReadAll(r.Body); err == nil {
-			body = data
-		}
-	}
-
-	// verify the content type is accurate
-	contentType := r.Header.Get("Content-Type")
-	if contentType != "application/json" {
-		log.Error().Msgf("contentType=%s, expect application/json", contentType)
-		return
-	}
-
-	log.Info().Msgf("handling request: %s", body)
-	var responseObj runtime.Object
-	if obj, gvk, err := deserializer.Decode(body, nil, nil); err != nil {
-		msg := fmt.Sprintf("Request could not be decoded: %v", err)
-		log.Error().Msg(msg)
-		http.Error(w, msg, http.StatusBadRequest)
-		return
-
-	} else {
-		requestedAdmissionReview, ok := obj.(*admission.AdmissionReview)
-		if !ok {
-			log.Error().Msgf("Expected v1.AdmissionReview but got: %T", obj)
-			return
-		}
-		responseAdmissionReview := &admission.AdmissionReview{}
-		responseAdmissionReview.SetGroupVersionKind(*gvk)
-		responseAdmissionReview.Response = admit.v1(*requestedAdmissionReview)
-		responseAdmissionReview.Response.UID = requestedAdmissionReview.Request.UID
-		responseObj = responseAdmissionReview
-
-	}
-	log.Info().Msgf("sending response: %v", responseObj)
-	respBytes, err := json.Marshal(responseObj)
-	if err != nil {
-		log.Err(err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(respBytes); err != nil {
-		log.Err(err)
-	}
-}
-
-func serveMutate(w http.ResponseWriter, r *http.Request) {
-	serve(w, r, AdmitHandler(mutate))
-}
-func serveValidate(w http.ResponseWriter, r *http.Request) {
-	serve(w, r, AdmitHandler(validate))
-}
-
-// adds prefix 'prod' to every incoming Deployment, example: prod-apps
-func mutate(ar admission.AdmissionReview) *admission.AdmissionResponse {
-	log.Info().Msgf("mutating deployments")
-	deploymentResource := metav1.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
-	if ar.Request.Resource != deploymentResource {
-		log.Error().Msgf("expect resource to be %s", deploymentResource)
-		return nil
-	}
-	raw := ar.Request.Object.Raw
-	deployment := appsv1.Deployment{}
-
-	if _, _, err := deserializer.Decode(raw, nil, &deployment); err != nil {
-		log.Err(err)
-		return &admission.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
-	}
-	newDeploymentName := fmt.Sprintf("prod-%s", deployment.GetName())
-	pt := admission.PatchTypeJSONPatch
-	deploymentPatch := fmt.Sprintf(`[{ "op": "add", "path": "/metadata/name", "value": "%s" }]`, newDeploymentName)
-	return &admission.AdmissionResponse{Allowed: true, PatchType: &pt, Patch: []byte(deploymentPatch)}
-}
-
-// verify if a Deployment has the 'prod' prefix name
-func validate(ar admission.AdmissionReview) *admission.AdmissionResponse {
-	log.Info().Msgf("validating deployments")
-	deploymentResource := metav1.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
-	if ar.Request.Resource != deploymentResource {
-		log.Error().Msgf("expect resource to be %s", deploymentResource)
-		return nil
-	}
-	raw := ar.Request.Object.Raw
-	deployment := appsv1.Deployment{}
-	if _, _, err := deserializer.Decode(raw, nil, &deployment); err != nil {
-		log.Err(err)
-		return &admission.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
-	}
-	if !strings.HasPrefix(deployment.GetName(), "prod-") {
-		return &admission.AdmissionResponse{
-			Allowed: false, Result: &metav1.Status{
-				Message: "Deployment's prefix name \"prod\" not found",
-			},
-		}
-	}
-	return &admission.AdmissionResponse{Allowed: true}
-}
 
 func main() {
-	var tlsKey, tlsCert string
-	flag.StringVar(&tlsKey, "tlsKey", "/etc/certs/tls.key", "Path to the TLS key")
-	flag.StringVar(&tlsCert, "tlsCert", "/etc/certs/tls.crt", "Path to the TLS certificate")
-	flag.Parse()
-	http.HandleFunc("/mutate", serveMutate)
-	http.HandleFunc("/validate", serveValidate)
-	log.Info().Msg("Server started ...")
-	log.Fatal().Err(http.ListenAndServeTLS(":8443", tlsCert, tlsKey, nil)).Msg("webhook server exited")
+	setLogger()
+
+	// handle our core application
+	http.HandleFunc("/validate-pods", ServeValidatePods)
+	http.HandleFunc("/mutate-pods", ServeMutatePods)
+	http.HandleFunc("/health", ServeHealth)
+
+	// start the server
+	// listens to clear text http on port 8080 unless TLS env var is set to "true"
+	if os.Getenv("TLS") == "true" {
+		cert := "/etc/admission-webhook/tls/tls.crt"
+		key := "/etc/admission-webhook/tls/tls.key"
+		logrus.Print("Listening on port 443...")
+		logrus.Fatal(http.ListenAndServeTLS(":443", cert, key, nil))
+	} else {
+		logrus.Print("Listening on port 8080...")
+		logrus.Fatal(http.ListenAndServe(":8080", nil))
+	}
+}
+
+// ServeHealth returns 200 when things are good
+func ServeHealth(w http.ResponseWriter, r *http.Request) {
+	logrus.WithField("uri", r.RequestURI).Debug("healthy")
+	fmt.Fprint(w, "OK")
+}
+
+// ServeValidatePods validates an admission request and then writes an admission
+// review to `w`
+func ServeValidatePods(w http.ResponseWriter, r *http.Request) {
+	logger := logrus.WithField("uri", r.RequestURI)
+	logger.Debug("received validation request")
+
+	in, err := parseRequest(*r)
+	if err != nil {
+		logger.Error(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	adm := admission.Admitter{
+		Logger:  logger,
+		Request: in.Request,
+	}
+
+	out, err := adm.ValidatePodReview()
+	if err != nil {
+		e := fmt.Sprintf("could not generate admission response: %v", err)
+		logger.Error(e)
+		http.Error(w, e, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	jout, err := json.Marshal(out)
+	if err != nil {
+		e := fmt.Sprintf("could not parse admission response: %v", err)
+		logger.Error(e)
+		http.Error(w, e, http.StatusInternalServerError)
+		return
+	}
+
+	logger.Debug("sending response")
+	logger.Debugf("%s", jout)
+	fmt.Fprintf(w, "%s", jout)
+}
+
+// ServeMutatePods returns an admission review with pod mutations as a json patch
+// in the review response
+func ServeMutatePods(w http.ResponseWriter, r *http.Request) {
+	logger := logrus.WithField("uri", r.RequestURI)
+	logger.Debug("received mutation request")
+
+	in, err := parseRequest(*r)
+	if err != nil {
+		logger.Error(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	adm := admission.Admitter{
+		Logger:  logger,
+		Request: in.Request,
+	}
+
+	out, err := adm.MutatePodReview()
+	if err != nil {
+		e := fmt.Sprintf("could not generate admission response: %v", err)
+		logger.Error(e)
+		http.Error(w, e, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	jout, err := json.Marshal(out)
+	if err != nil {
+		e := fmt.Sprintf("could not parse admission response: %v", err)
+		logger.Error(e)
+		http.Error(w, e, http.StatusInternalServerError)
+		return
+	}
+
+	logger.Debug("sending response")
+	logger.Debugf("%s", jout)
+	fmt.Fprintf(w, "%s", jout)
+}
+
+// setLogger sets the logger using env vars, it defaults to text logs on
+// debug level unless otherwise specified
+func setLogger() {
+	logrus.SetLevel(logrus.DebugLevel)
+
+	lev := os.Getenv("LOG_LEVEL")
+	if lev != "" {
+		llev, err := logrus.ParseLevel(lev)
+		if err != nil {
+			logrus.Fatalf("cannot set LOG_LEVEL to %q", lev)
+		}
+		logrus.SetLevel(llev)
+	}
+
+	if os.Getenv("LOG_JSON") == "true" {
+		logrus.SetFormatter(&logrus.JSONFormatter{})
+	}
+}
+
+// parseRequest extracts an AdmissionReview from an http.Request if possible
+func parseRequest(r http.Request) (*admissionv1.AdmissionReview, error) {
+	if r.Header.Get("Content-Type") != "application/json" {
+		return nil, fmt.Errorf("Content-Type: %q should be %q",
+			r.Header.Get("Content-Type"), "application/json")
+	}
+
+	bodybuf := new(bytes.Buffer)
+	bodybuf.ReadFrom(r.Body)
+	body := bodybuf.Bytes()
+
+	if len(body) == 0 {
+		return nil, fmt.Errorf("admission request body is empty")
+	}
+
+	var a admissionv1.AdmissionReview
+
+	if err := json.Unmarshal(body, &a); err != nil {
+		return nil, fmt.Errorf("could not parse admission review request: %v", err)
+	}
+
+	if a.Request == nil {
+		return nil, fmt.Errorf("admission review can't be used: Request field is nil")
+	}
+
+	return &a, nil
 }
