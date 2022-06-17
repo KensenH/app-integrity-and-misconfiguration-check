@@ -2,7 +2,9 @@
 
 #script to generate tls certificate for webhook server
 
+[ "$UID" -eq 0 ] || exec sudo "$0" "$@"
 fn=tls
+validationConfigPath="./charts/templates/validationConfig.yaml"
 
 mkdir $fn
 
@@ -31,8 +33,13 @@ openssl x509 -req \
    --dry-run=client -o yaml \
    > charts/templates/secrets.yaml
 
-# echo
-# echo ">> MutatingWebhookConfiguration caBundle:"
-cat $fn/ca.crt | base64 | fold
+ echo
+ echo ">> MutatingWebhookConfiguration caBundle:"
+ bundle=$(cat $fn/ca.crt | base64 | fold) 
+ echo $bundle
+
+pre_owner=$(stat -c "%U" $validationConfigPath)
+VALUE=$bundle yq -i '.webhooks[0].clientConfig.caBundle = strenv(VALUE)' $validationConfigPath
+chown "$pre_owner":"$pre_owner" $validationConfigPath
 
 yes | rm -r ./$fn
