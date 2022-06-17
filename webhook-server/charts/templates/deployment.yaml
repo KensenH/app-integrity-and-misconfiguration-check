@@ -15,10 +15,10 @@ spec:
       containers:
         - image: {{ .Values.image.name }}:{{ .Values.image.tag }}
           name: {{ .Values.name }}
-      #     volumeMounts:
-      #       - name: tls
-      #         mountPath: "/etc/admission-webhook/tls"
-      # volumes:
-      #   - name: tls
-      #     secret:
-      #       secretName: simple-kubernetes-webhook-tls
+          volumeMounts:
+            - name: tls
+              mountPath: "/etc/admission-webhook/tls"
+      volumes:
+        - name: tls
+          secret:
+            secretName: webhook-tls

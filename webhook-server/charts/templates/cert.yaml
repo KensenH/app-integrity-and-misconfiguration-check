@@ -1,8 +1,0 @@
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: simple-kubernetes-webhook-tls
-# type: kubernetes.io/tls
-# data:
-#   tls.crt: LS0t...
-#   tls.key: LS0t...
