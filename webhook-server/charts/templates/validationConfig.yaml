@@ -1,0 +1,24 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+ name: "kubernetes-webhook.acme.com"
+webhooks:
+ - name: "kubernetes-webhook.acme.com"
+   namespaceSelector:
+     matchLabels:
+       admission-webhook: enabled
+   rules:
+     - apiGroups: [""]
+       apiVersions: ["v1"]
+       operations: ["CREATE"]
+       resources: ["pods"]
+       scope: "*"
+   clientConfig:
+     service:
+       namespace: default
+       name: {{ .Values.name }}
+       path: /validate
+       port: 80
+    #  caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUMzREND...
+   admissionReviewVersions: ["v1", "v1beta1"]
+   sideEffects: None

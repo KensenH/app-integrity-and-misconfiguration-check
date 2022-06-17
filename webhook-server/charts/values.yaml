@@ -1,0 +1,14 @@
+replicaCount: 1
+
+name: "admission-controller-webhook"
+
+image:
+  name: kensenh/simple-kubernetes-webhook
+  pullPolicy: Always
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources: {}
