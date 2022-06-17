@@ -27,7 +27,7 @@ openssl x509 -req \
 
  echo
  echo ">> Generating kube secrets..."
- kubectl create secret tls simple-kubernetes-webhook-tls \
+ kubectl create secret tls webhook-tls \
    --cert=$fn/server.crt \
    --key=$fn/server.key \
    --dry-run=client -o yaml \
