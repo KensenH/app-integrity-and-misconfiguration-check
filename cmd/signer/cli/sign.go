@@ -2,44 +2,78 @@ package cli
 
 import (
 	"fmt"
+	"io/ioutil"
+	"math/rand"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/k8smanifest"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	kubeutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"os/exec"
 )
 
 const filenameIfInputIsDir = "manifest.yaml"
 
 func NewCmdSign() *cobra.Command {
 
-	var imageRef string
-	var inputDir string
+	var imageRef string = ""
+	// var inputDir string = ""
 	var keyPath string
-	var output string
+	// var output string = ""
 	var applySignatureConfigMap bool
 	var updateAnnotation bool
 	var imageAnnotations []string
+
+	var chartsPath string
+
 	cmd := &cobra.Command{
-		Use:   "sign -f FILENAME [-i IMAGE]",
-		Short: "A command to sign Kubernetes YAML manifests",
+		Use:   "sign -d chart_path",
+		Short: "A command to sign charts folder",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			err := sign(inputDir, imageRef, keyPath, output, applySignatureConfigMap, updateAnnotation, imageAnnotations)
+			temp_dir := "temp_" + randomString(10)
+
+			prep_command := "helm template " + chartsPath + " --output-dir " + temp_dir
+			render_cmd := exec.Command("bash", "-c", prep_command)
+
+			err := render_cmd.Run()
 			if err != nil {
-				log.Fatalf("error occurred during signing: %s", err.Error())
-				return nil
+				log.Fatal(err)
 			}
+
+			inside := temp_dir + "/Charts/templates/"
+			files, err := ioutil.ReadDir(inside)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			for _, file := range files {
+				if file.IsDir() {
+					continue
+				}
+
+				temp_full_path := inside + file.Name()
+				err = sign(temp_full_path, imageRef, keyPath, temp_full_path, applySignatureConfigMap, updateAnnotation, imageAnnotations)
+				if err != nil {
+					log.Fatalf("error occurred during signing: %s", err.Error())
+					return nil
+				}
+
+			}
+
 			return nil
 		},
 	}
 
-	cmd.PersistentFlags().StringVarP(&inputDir, "filename", "f", "", "file name which will be signed (if dir, all YAMLs inside it will be signed)")
-	cmd.PersistentFlags().StringVarP(&imageRef, "image", "i", "", "image name which bundles yaml files and be signed")
-	cmd.PersistentFlags().StringVarP(&output, "output", "o", "", "output file name or k8s signature configmap reference (if empty, use `<filename>.signed`)")
+	cmd.PersistentFlags().StringVarP(&chartsPath, "dir", "d", "charts/", "path to charts")
+	// cmd.PersistentFlags().StringVarP(&inputDir, "filename", "f", "", "file name which will be signed (if dir, all YAMLs inside it will be signed)")
+	// cmd.PersistentFlags().StringVarP(&imageRef, "image", "i", "", "image name which bundles yaml files and be signed")
+	// cmd.PersistentFlags().StringVarP(&output, "output", "o", "", "output file name or k8s signature configmap reference (if empty, use `<filename>.signed`)")
 	cmd.PersistentFlags().StringVarP(&keyPath, "key", "k", "", "path to your signing key (if empty, do key-less signing)")
 	cmd.PersistentFlags().BoolVar(&applySignatureConfigMap, "apply-signature-configmap", false, "whether to apply a generated signature configmap only when `output` is k8s configmap")
 	cmd.PersistentFlags().BoolVar(&updateAnnotation, "annotation-metadata", true, "whether to update annotation and generate signed yaml file")
@@ -106,4 +140,11 @@ func parseAnnotations(annotations []string) (map[string]interface{}, error) {
 		annotationsMap[kvp[0]] = kvp[1]
 	}
 	return annotationsMap, nil
+}
+
+func randomString(length int) string {
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, length)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)[:length]
 }
