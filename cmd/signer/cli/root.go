@@ -6,6 +6,8 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/kubectl/pkg/scheme"
 )
@@ -47,10 +49,7 @@ func init() {
 
 	RootCmd.AddCommand(NewCmdSign())
 	RootCmd.AddCommand(NewCmdVerify())
-	// RootCmd.AddCommand(NewCmdVerifyResource())
-	// RootCmd.AddCommand(NewCmdApplyAfterVerify())
-	// RootCmd.AddCommand(NewCmdManifestBuild())
-	// RootCmd.AddCommand(NewCmdVersion())
+	RootCmd.AddCommand(NewCmdScan())
 
 	logLevelStr := os.Getenv(logLevelEnvKey)
 	if logLevelStr == "" {
@@ -62,4 +61,56 @@ func init() {
 	}
 
 	log.SetLevel(logLevel)
+}
+
+// NewLogger creates a logger
+func NewLogger(logLevel string, zapEncoding string) (*zap.SugaredLogger, error) {
+	level := zap.NewAtomicLevelAt(zapcore.InfoLevel)
+	switch logLevel {
+	case "debug":
+		level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+	case "info":
+		level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
+	case "warn":
+		level = zap.NewAtomicLevelAt(zapcore.WarnLevel)
+	case "error":
+		level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	case "fatal":
+		level = zap.NewAtomicLevelAt(zapcore.FatalLevel)
+	case "panic":
+		level = zap.NewAtomicLevelAt(zapcore.PanicLevel)
+	}
+
+	zapEncoderConfig := zapcore.EncoderConfig{
+		TimeKey:        "timestamp",
+		LevelKey:       "severity",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "message",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.LowercaseLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+
+	zapConfig := zap.Config{
+		Level:       level,
+		Development: false,
+		Sampling: &zap.SamplingConfig{
+			Initial:    100,
+			Thereafter: 100,
+		},
+		Encoding:         zapEncoding,
+		EncoderConfig:    zapEncoderConfig,
+		OutputPaths:      []string{"stderr"},
+		ErrorOutputPaths: []string{"stderr"},
+	}
+
+	logger, err := zapConfig.Build()
+	if err != nil {
+		return nil, err
+	}
+	return logger.Sugar(), nil
 }
