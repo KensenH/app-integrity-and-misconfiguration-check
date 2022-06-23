@@ -10,14 +10,16 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/slackhq/simple-kubernetes-webhook/pkg/admission"
 	admissionv1 "k8s.io/api/admission/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	types "k8s.io/apimachinery/pkg/types"
 )
 
 func main() {
 	setLogger()
 
 	// handle our core application
-	http.HandleFunc("/validate-pods", ServeValidatePods)
-	http.HandleFunc("/mutate-pods", ServeMutatePods)
+	http.HandleFunc("/validate", ServeValidate)
+	// http.HandleFunc("/mutate-pods", ServeMutatePods)
 	http.HandleFunc("/health", ServeHealth)
 
 	// start the server
@@ -41,7 +43,7 @@ func ServeHealth(w http.ResponseWriter, r *http.Request) {
 
 // ServeValidatePods validates an admission request and then writes an admission
 // review to `w`
-func ServeValidatePods(w http.ResponseWriter, r *http.Request) {
+func ServeValidate(w http.ResponseWriter, r *http.Request) {
 	logger := logrus.WithField("uri", r.RequestURI)
 	logger.Debug("received validation request")
 
@@ -52,12 +54,15 @@ func ServeValidatePods(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	adm := admission.Admitter{
-		Logger:  logger,
-		Request: in.Request,
+	var obj map[string]interface{}
+	err = json.Unmarshal(in.Request.Object.Raw, &obj)
+	if err != nil {
+		logger.Error(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	out, err := adm.ValidatePodReview()
+	out, err := validateManifest(obj, in)
 	if err != nil {
 		e := fmt.Sprintf("could not generate admission response: %v", err)
 		logger.Error(e)
@@ -164,4 +169,44 @@ func parseRequest(r http.Request) (*admissionv1.AdmissionReview, error) {
 	}
 
 	return &a, nil
+}
+
+func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionReview) (*admissionv1.AdmissionReview, error) {
+	//Check if this resource spawned by an owner resource
+	var err error
+	objMetadata := obj["metadata"].(map[string]interface{})
+	if _, ok := objMetadata["ownerReferences"]; ok {
+		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "child resource"), err
+	}
+
+	//Check if there is cosign signature
+	objAnnotations := objMetadata["annotations"].(map[string]interface{})
+	if _, ok := objAnnotations["cosign.sigstore.dev/message"]; !ok {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/message not found"), err
+	}
+
+	if _, ok := objAnnotations["cosign.sigstore.dev/signature"]; !ok {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/signature not found"), err
+	}
+
+	return reviewResponse(in.Request.UID, true, http.StatusAccepted, "yes"), err
+}
+
+// reviewResponse TODO: godoc
+func reviewResponse(uid types.UID, allowed bool, httpCode int32,
+	reason string) *admissionv1.AdmissionReview {
+	return &admissionv1.AdmissionReview{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AdmissionReview",
+			APIVersion: "admission.k8s.io/v1",
+		},
+		Response: &admissionv1.AdmissionResponse{
+			UID:     uid,
+			Allowed: allowed,
+			Result: &metav1.Status{
+				Code:    httpCode,
+				Message: reason,
+			},
+		},
+	}
 }
