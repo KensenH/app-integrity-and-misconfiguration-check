@@ -1,12 +1,10 @@
-/*
-Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
-*/
 package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -27,93 +25,180 @@ import (
 const letterBytes = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const filenameIfInputIsDir = "manifest.yaml"
 
+type FlagsInput struct {
+	chartsPath                 string
+	keyPath                    string
+	owaspDependencyCheckScan   string
+	owaspDependencyCheckOutput string
+	kubesecScan                bool
+	kubesecOutput              string
+}
+
 // goCmd represents the go command
 var goCmd = &cobra.Command{
 	Use:   "go",
 	Short: "gather and upload artifacts in one go",
 	Long: `EXAMPLE gathernupload go [FLAGS]
 	Flags
+	-c, --charts-directory path/to/charts/directory
 	-b, --backend-storage-key path/to/key
+	--owasp-dependency-check-scan path/to/project
+	--owasp-dependency-check-output path/to/dependency/check/output.json
+	--kubesec-scan true/false , true=scan-manifest, false=skip-scanning
+	--kubesec-output path/to/kubesec/output.json
 
-	
+	(script can't take any args)
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
+
+		if len(args) > 0 {
+			cmd.Help()
+			os.Exit(1)
+		}
+
+		chartsPath, _ := cmd.Flags().GetString("charts-directory")
+		backendStorageKey, _ := cmd.Flags().GetString("backend-storage-key")
+		owaspDependencyCheckScan, _ := cmd.Flags().GetString("owasp-dependency-check-scan")
+		owaspDependencyCheckOutput, _ := cmd.Flags().GetString("owasp-dependency-check-output")
+		kubesecScan, _ := cmd.Flags().GetBool("kubesec-scan")
+		kubesecOutput, _ := cmd.Flags().GetString("kubesec-output")
+
+		flags := FlagsInput{chartsPath, backendStorageKey, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput}
+
+		fmt.Printf("%s %s %s %s %t %s\n", chartsPath, backendStorageKey, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput)
+
+		// input := Input(cmd.Flags().GetString("charts-directory"))
 		id := randStringBytes(15)
 
 		err := makeKeyPair(cmd.Context())
 		if err != nil {
-			fmt.Errorf("creating key: %w", err)
+			log.Errorf("creating key: %w", err)
+			os.Exit(1)
 		}
 
-		err = gatherArtifacts(id)
+		err = gatherArtifacts(id, flags)
 		if err != nil {
-			fmt.Errorf("gathering artifacts: %w", err)
+			log.Errorf("gathering artifacts: %w", err)
+			os.Exit(1)
 		}
 
 	},
 }
 
-func gatherArtifacts(id string) error {
+func gatherArtifacts(id string, flags FlagsInput) error {
 	//create folder
 	dirname := id + "_artifacts"
-	err := os.Mkdir(dirname, 0755)
-	if err != nil {
+
+	if _, err := os.Stat(flags.chartsPath); os.IsNotExist(err) {
+		log.Errorf("%s dir not found", flags.chartsPath)
 		return err
 	}
 
-	chartsPath := "./sample_charts"
+	err := os.Mkdir(dirname, 0755)
+	if err != nil {
+		log.Errorf("making dir %s failed\n", dirname)
+		return err
+	}
 
 	//render manifest from charts
-	prep_command := "helm template " + chartsPath + " --output-dir " + dirname
+	prep_command := "helm template " + flags.chartsPath + " --output-dir " + dirname
 	render_cmd := exec.Command("bash", "-c", prep_command)
 
 	err = render_cmd.Run()
 	if err != nil {
-		log.Fatal(err)
+		log.Errorf("rendering charts failed\n")
+		return err
 	}
 
-	inside := dirname + "/Charts/templates/"
+	inside := filepath.Join(dirname, "/Charts/templates")
 	files, err := ioutil.ReadDir(inside)
 	if err != nil {
-		log.Fatal(err)
+		log.Errorf("reading rendered charts failed\n")
+		return err
 	}
 
 	var imageRef string = ""
-	// var inputDir string = ""
 	var keyPath string = "cosign.key"
-	// var output string = ""
 	var applySignatureConfigMap bool = false
 	var updateAnnotation bool = true
 	var imageAnnotations []string
 
+	//sign kubernetes manifest
 	for _, file := range files {
 		if file.IsDir() {
 			continue
 		}
-		temp_full_path := inside + file.Name()
+		temp_full_path := filepath.Join(inside, file.Name())
 
-		err = giveManifestId(temp_full_path, id)
+		err = giveManifestId(temp_full_path, file.Name(), id)
 		if err != nil {
-			log.Fatal(err)
+			log.Errorf("gatherArtifacts - attaching id to manifest %s failed\n", file.Name())
+			return err
 		}
 
 		err = sign(temp_full_path, imageRef, keyPath, temp_full_path, applySignatureConfigMap, updateAnnotation, imageAnnotations)
 		if err != nil {
-			log.Fatalf("error occurred during signing: %s", err.Error())
+			log.Errorf("gatherArtifacts - signing manifest %s failed\n", file.Name())
+			return err
+		}
+	}
+
+	//Check OWASP Dependency Check Output
+	if _, err := os.Stat(flags.owaspDependencyCheckOutput); errors.Is(err, os.ErrNotExist) {
+		log.Errorf("gatherArtifacts - OWASP Dependency Check output not found")
+		os.Exit(1)
+	} else {
+		err = copyFile(flags.owaspDependencyCheckOutput, dirname+"/dependency-check-report.json")
+		if err != nil {
+			return err
+		}
+	}
+
+	//Check Kubesec Output
+	if _, err := os.Stat(flags.kubesecOutput); errors.Is(err, os.ErrNotExist) {
+		log.Errorf("gatherArtifacts - kubesec output not found")
+		os.Exit(1)
+	} else {
+		err = copyFile(flags.kubesecOutput, dirname+"/kubesec-output.json")
+		if err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
+func copyFile(src string, dst string) error {
+	fin, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer fin.Close()
 
-func giveManifestId(temp_full_path string, id string) error {
+	fout, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer fout.Close()
+
+	_, err = io.Copy(fout, fin)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func giveManifestId(temp_full_path string, filename string, id string) error {
 	files, err := ioutil.ReadFile(temp_full_path)
 	if err != nil {
+		log.Errorf("giveManifestId - error reading files %s", temp_full_path)
 		return err
 	}
 
 	var manifest map[string]interface{}
 	if err := yaml.Unmarshal(files, &manifest); err != nil {
+		log.Errorf("giveManifestId - unmarshal yaml failed")
 		return err
 	}
 	metadata := manifest["metadata"].(map[string]interface{})
@@ -125,16 +210,18 @@ func giveManifestId(temp_full_path string, id string) error {
 	}
 
 	annotations := manifest["metadata"].(map[string]interface{})["annotations"].(map[string]interface{})
-	annotations["gnup-id"] = id
+	annotations["gnup-id"] = id + "_" + filename
 	manifest["metadata"].(map[string]interface{})["annotations"] = annotations
 
 	newYaml, err := yaml.Marshal(manifest)
 	if err != nil {
+		log.Errorf("giveManifestId - marshaling to newYaml failed")
 		return err
 	}
 
 	err = ioutil.WriteFile(temp_full_path, newYaml, 0)
 	if err != nil {
+		log.Errorf("giceManifestId - writefile to %s failed", temp_full_path)
 		return err
 	}
 
@@ -236,13 +323,11 @@ func parseAnnotations(annotations []string) (map[string]interface{}, error) {
 func init() {
 	rootCmd.AddCommand(goCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// goCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// goCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	goCmd.Flags().StringP("charts-directory", "c", "./charts", "path to charts folder/directory")
+	goCmd.Flags().StringP("backend-storage-key", "b", "./credentials.json", "path to backend credentials")
+	goCmd.Flags().StringP("owasp-dependency-check-scan", "", "", "project's path to scan (leave empty to skip scanning)")
+	goCmd.Flags().StringP("owasp-dependency-check-output", "", "./dependency-check-report.json", "path to owasp dependency check output")
+	goCmd.Flags().BoolP("kubesec-scan", "", false, "if true, script will scan manifests, else will skip scanning")
+	goCmd.Flags().StringP("kubesec-output", "", "./kubesec-output.json", "path to kubesec output")
+	goCmd.Flags().BoolP("rm-key", "", true, "delete key after process (both key pair need to be in the same directory)")
 }
