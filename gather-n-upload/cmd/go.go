@@ -34,7 +34,8 @@ type FlagsInput struct {
 	owaspDependencyCheckOutput string
 	kubesecScan                bool
 	kubesecOutput              string
-	bucketname                 string
+	artifactsBucketName        string
+	publicKeysBucketName       string
 }
 
 // goCmd represents the go command
@@ -45,16 +46,20 @@ var goCmd = &cobra.Command{
 
 	FLAGS
 	-c, --charts-directory path/to/charts/directory
-	-b, --backend-storage-key path/to/key
 	--owasp-dependency-check-scan path/to/project
 	--owasp-dependency-check-output path/to/dependency/check/output.json
 	--kubesec-scan true/false , true=scan-manifest, false=skip-scanning
 	--kubesec-output path/to/kubesec/output.json
-	--bucket-name "backend_storage_bucket_name"
+	--artifacts-bucket-name "backend_storage_artifacts_bucket_name"
+	--public-keys-bucket-name "backend_storage_public_keys_bucket_name"
 
 	NOTES
 	- gathernupload go command don't need any args but flags
 	- backend storage key need to be set on environment variable GOOGLE_APPLICATION_CREDENTIALS="path/to/credentials.json"
+	
+	DEPENDENCIES
+	- HELM
+
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -63,15 +68,28 @@ var goCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		//check if backend storage's credential is set
+		if !envExist("GOOGLE_APPLICATION_CREDENTIALS") {
+			log.Errorf("backend storage credentials is not set, use 'export GOOGLE_APPLICATION_CREDENTIALS=path/to/key' to setup credential")
+		}
+
+		//move all flags inputted to struct
 		chartsPath, _ := cmd.Flags().GetString("charts-directory")
 		backendStorageKey, _ := cmd.Flags().GetString("backend-storage-key")
 		owaspDependencyCheckScan, _ := cmd.Flags().GetString("owasp-dependency-check-scan")
 		owaspDependencyCheckOutput, _ := cmd.Flags().GetString("owasp-dependency-check-output")
 		kubesecScan, _ := cmd.Flags().GetBool("kubesec-scan")
 		kubesecOutput, _ := cmd.Flags().GetString("kubesec-output")
-		bucketName, _ := cmd.Flags().GetString("bucket-name")
+		artifactsBucketName, _ := cmd.Flags().GetString("artifacts-bucket-name")
+		publicKeysBucketName, _ := cmd.Flags().GetString("public-keys-bucket-name")
 
-		flags := FlagsInput{chartsPath, backendStorageKey, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput, bucketName}
+		flags := FlagsInput{chartsPath, backendStorageKey, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput, artifactsBucketName, publicKeysBucketName}
+
+		//check if charts directory inputted is exist
+		if _, err := os.Stat(flags.chartsPath); os.IsNotExist(err) {
+			log.Errorf("%s dir not found", flags.chartsPath)
+			os.Exit(1)
+		}
 
 		// input := Input(cmd.Flags().GetString("charts-directory"))
 		id := randStringBytes(15)
@@ -89,12 +107,27 @@ var goCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = uploadArtifacts(dirname, flags.bucketname)
+		err = uploadArtifacts(dirname, flags.artifactsBucketName)
 		if err != nil {
 			log.Errorf("upload artifacts: %w", err)
 			os.Exit(1)
 		}
+
+		err = uploadPublicKey(id, flags.publicKeysBucketName)
+		if err != nil {
+			log.Errorf("upload public key: %w", err)
+			os.Exit(1)
+		}
 	},
+}
+
+func uploadPublicKey(id string, bucketname string) error {
+	err := uploadFileToBackendStorage("./cosign.pub", bucketname, id+".pub")
+	if err != nil {
+		log.Errorf("upload public key error")
+		return err
+	}
+	return nil
 }
 
 func uploadArtifacts(dirname string, bucketname string) error {
@@ -114,8 +147,7 @@ func uploadArtifacts(dirname string, bucketname string) error {
 		}
 
 		if !fileInfo.IsDir() {
-			fmt.Println(path)
-			err = uploadFileToBackendStorage(dirname, path, bucketname)
+			err = uploadFileToBackendStorage(path, bucketname, path)
 			if err != nil {
 				log.Errorf("uploadArtifacts - upload file to backend storage failed")
 				return err
@@ -131,7 +163,7 @@ func uploadArtifacts(dirname string, bucketname string) error {
 	return nil
 }
 
-func uploadFileToBackendStorage(dirname string, filePath string, bucketname string) error {
+func uploadFileToBackendStorage(filePath string, bucketname string, object string) error {
 	ctx := context.Background()
 
 	// Creates a client.
@@ -152,7 +184,7 @@ func uploadFileToBackendStorage(dirname string, filePath string, bucketname stri
 	ctx, cancel := context.WithTimeout(ctx, time.Second*50)
 	defer cancel()
 
-	o := client.Bucket(bucketname).Object(filePath)
+	o := client.Bucket(bucketname).Object(object)
 	o = o.If(storage.Conditions{DoesNotExist: true})
 
 	wc := o.NewWriter(ctx)
@@ -164,18 +196,14 @@ func uploadFileToBackendStorage(dirname string, filePath string, bucketname stri
 		log.Errorf("Writer.Close: %v", err)
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "Blob %v uploaded.\n", filePath)
+	fmt.Fprintf(os.Stdout, "Blob %v uploaded.\n", object)
 
 	return nil
 }
 
 func gatherArtifacts(id string, flags FlagsInput, dirname string) error {
-	//create folder
-	if _, err := os.Stat(flags.chartsPath); os.IsNotExist(err) {
-		log.Errorf("%s dir not found", flags.chartsPath)
-		return err
-	}
 
+	//create folder
 	err := os.Mkdir(dirname, 0755)
 	if err != nil {
 		log.Errorf("making dir %s failed\n", dirname)
@@ -343,6 +371,11 @@ func makeKeyPair(ctx context.Context) error {
 	return nil
 }
 
+func envExist(name string) bool {
+	_, exist := os.LookupEnv(name)
+	return exist
+}
+
 func sign(inputDir, imageRef, keyPath, output string, applySignatureConfigMap, updateAnnotation bool, annotations []string) error {
 	if output == "" && updateAnnotation {
 		if isDir, _ := k8smnfutil.IsDir(inputDir); isDir {
@@ -412,8 +445,10 @@ func init() {
 	goCmd.Flags().BoolP("kubesec-scan", "", false, "if true, script will scan manifests, else will skip scanning")
 	goCmd.Flags().StringP("kubesec-output", "", "./kubesec-output.json", "path to kubesec output")
 	goCmd.Flags().BoolP("rm-key", "", true, "delete key after process (both key pair need to be in the same directory)")
-	goCmd.Flags().StringP("bucket-name", "", "", "bucket name to upload artifacts")
+	goCmd.Flags().StringP("artifacts-bucket-name", "", "", "bucket name to upload artifacts")
+	goCmd.Flags().StringP("public-keys-bucket-name", "", "", "bucket name to upload public key")
 
-	goCmd.MarkFlagRequired("bucket-name")
+	goCmd.MarkFlagRequired("public-keys-bucket-name")
+	goCmd.MarkFlagRequired("artifacts-bucket-name")
 	goCmd.MarkFlagRequired("charts-directory")
 }
