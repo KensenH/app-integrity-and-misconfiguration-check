@@ -2,18 +2,29 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/sirupsen/logrus"
 	"github.com/slackhq/simple-kubernetes-webhook/pkg/admission"
+	"google.golang.org/api/iterator"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 )
+
+const letterBytes = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 func main() {
 	setLogger()
@@ -177,32 +188,143 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 	var err error
 	objMetadata := obj["metadata"].(map[string]interface{})
 
+	//check namespace if not default then, approve
 	namespace := objMetadata["namespace"].(string)
 	if namespace != "default" {
 		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "namespace not default"), err
 	}
 
+	//check if resource have parent, if yes then approve
 	if _, ok := objMetadata["ownerReferences"]; ok {
 		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "child resource"), err
 	}
 
-	//Check if there is cosign signature and gnup-id
+	//check if there is cosign signature and gnup-id
 	objAnnotations := objMetadata["annotations"].(map[string]interface{})
 	if _, ok := objAnnotations["cosign.sigstore.dev/message"]; !ok {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/message annotation not found"), err
 	}
-
 	if _, ok := objAnnotations["cosign.sigstore.dev/signature"]; !ok {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/signature annotation not found"), err
 	}
-
 	if _, ok := objAnnotations["gnup-id"]; !ok {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "gnup-id annotation not found"), err
 	}
-						
 
+	gnupId := strings.Split(objAnnotations["gnup-id"].(string), "_")
 
-	return reviewResponse(in.Request.UID, true, http.StatusAccepted, "yes"), err
+	//rand string to avoid race conditions
+	folderName := randStringBytes(5) + "_" + gnupId[0]
+
+	//create folder with unique name
+	if err := os.Mkdir(folderName, os.ModePerm); err != nil {
+		log.Fatal(err)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "gnup-id annotation not found"), err
+	}
+
+	//list all object related to gnup-id
+	objectList, err := getObjectList(gnupId[0]+"_artifacts/", "", "gather-n-upload-artifacts")
+	if err != nil {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "listing object failed"), err
+	}
+
+	err = downloadListFromStorage(folderName, objectList, "gather-n-upload-artifacts")
+	if err != nil {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading list from storage failed"), err
+	}
+
+	return reviewResponse(in.Request.UID, true, http.StatusAccepted, ""), err
+}
+
+func randStringBytes(n int) string {
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
+}
+
+func downloadListFromStorage(folderName string, objectList []string, bucket string) error {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Second*50)
+	defer cancel()
+
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	for _, object := range objectList {
+		split := strings.Split(object, "/")
+
+		path := filepath.Join(split[1 : len(split)-1]...)
+		path = filepath.Join(folderName, path)
+
+		destFileName := filepath.Join(split[1:]...)
+		destFileName = filepath.Join(folderName, destFileName)
+
+		if len(split) > 2 {
+			if err := os.MkdirAll(path, os.ModePerm); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		f, err := os.Create(destFileName)
+		if err != nil {
+			log.Fatalf("os.Create: %v", err.Error())
+		}
+
+		rc, err := client.Bucket(bucket).Object(object).NewReader(ctx)
+		if err != nil {
+			log.Fatalf("Object(%q).NewReader: %v", object, err.Error())
+		}
+		defer rc.Close()
+
+		if _, err := io.Copy(f, rc); err != nil {
+			log.Fatalf("io.Copy: %v", err)
+		}
+
+		if err = f.Close(); err != nil {
+			log.Fatalf("f.Close: %v", err)
+		}
+
+	}
+	return nil
+}
+
+func getObjectList(prefix string, delim string, bucket string) ([]string, error) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Second*50)
+	defer cancel()
+
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+
+	var objects []string
+
+	it := client.Bucket(bucket).Objects(ctx, &storage.Query{
+		Prefix:    prefix,
+		Delimiter: delim,
+	})
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			log.Fatalf("Bucket(%q).Objects(): %v", bucket, err)
+			return nil, err
+		}
+		fmt.Fprintln(os.Stdout, attrs.Name)
+		objects = append(objects, attrs.Name)
+	}
+
+	return objects, nil
 }
 
 // reviewResponse TODO: godoc
