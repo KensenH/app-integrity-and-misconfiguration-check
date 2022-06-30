@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/slackhq/simple-kubernetes-webhook/pkg/admission"
+
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -175,19 +176,31 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 	//Check if this resource spawned by an owner resource
 	var err error
 	objMetadata := obj["metadata"].(map[string]interface{})
+
+	namespace := objMetadata["namespace"].(string)
+	if namespace != "default" {
+		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "namespace not default"), err
+	}
+
 	if _, ok := objMetadata["ownerReferences"]; ok {
 		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "child resource"), err
 	}
 
-	//Check if there is cosign signature
+	//Check if there is cosign signature and gnup-id
 	objAnnotations := objMetadata["annotations"].(map[string]interface{})
 	if _, ok := objAnnotations["cosign.sigstore.dev/message"]; !ok {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/message not found"), err
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/message annotation not found"), err
 	}
 
 	if _, ok := objAnnotations["cosign.sigstore.dev/signature"]; !ok {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/signature not found"), err
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/signature annotation not found"), err
 	}
+
+	if _, ok := objAnnotations["gnup-id"]; !ok {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "gnup-id annotation not found"), err
+	}
+						
+
 
 	return reviewResponse(in.Request.UID, true, http.StatusAccepted, "yes"), err
 }
