@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    cosign.sigstore.dev/message: H4sIAAAAAAAA/wDzAAz/H4sIAAAAAAAA/+zQzW7DIAwH8Jx5Cl4gjaGkiXiKnnZ3EytDGSYC7/Ppp1RbtR2mqbtM0/K7WAb/QdBIXJohxSVTKYGnWjDX00t9Gh31dqDedtgIFakf6XSb0rzfPWO8q64BAHBwbq2ma+FjPbMWKuNs66Dtus5UYPcHA5WGq275ofsimCuAmbgQfz333f7bWy71j8Al3FAuIbHXD0bNgUevj2lUkQRHFPRKa8ZIXvMU+EmVhYZ1bUgsGJhyWbtah4jT+5A3O+N2Vmn9Obv2S8pyjqyhyyHHlMXrHtRv/8dms9n8F68BAAD//zsbUKYACAAAAQAA//+VWnJ88wAAAA==
+    cosign.sigstore.dev/signature: MEYCIQDzy82ECXqah6Vuvxc9H+aiHFI+2M9CNkt7IT4syAV5SQIhAPKG30ewZFG3Dq44JxBlKqTNVTm6FgwyOvNmjdIJVf6M
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Pod","metadata":{"annotations":{"cosign.sigstore.dev/message":"H4sIAAAAAAAA/wDzAAz/H4sIAAAAAAAA/+zQzW7DIAwH8Jx5Cl4gjaGkiXiKnnZ3EytDGSYC7/Ppp1RbtR2mqbtM0/K7WAb/QdBIXJohxSVTKYGnWjDX00t9Gh31dqDedtgIFakf6XSb0rzfPWO8q64BAHBwbq2ma+FjPbMWKuNs66Dtus5UYPcHA5WGq275ofsimCuAmbgQfz333f7bWy71j8Al3FAuIbHXD0bNgUevj2lUkQRHFPRKa8ZIXvMU+EmVhYZ1bUgsGJhyWbtah4jT+5A3O+N2Vmn9Obv2S8pyjqyhyyHHlMXrHtRv/8dms9n8F68BAAD//zsbUKYACAAAAQAA//+VWnJ88wAAAA==","cosign.sigstore.dev/signature":"MEYCIQDzy82ECXqah6Vuvxc9H+aiHFI+2M9CNkt7IT4syAV5SQIhAPKG30ewZFG3Dq44JxBlKqTNVTm6FgwyOvNmjdIJVf6M"},"name":"nginx","namespace":"default"},"spec":{"containers":[{"image":"nginx:1.14.2","name":"nginx","ports":[{"containerPort":80}]}]}}
+  creationTimestamp: "2022-06-22T07:00:32Z"
+  name: nginx
+  namespace: default
+  resourceVersion: "2777146"
+  uid: 674d3097-fbcf-448b-a543-b0214a9bf32b
+spec:
+  containers:
+  - image: nginx:1.14.2
+    imagePullPolicy: IfNotPresent
+    name: nginx
+    ports:
+    - containerPort: 80
+      protocol: TCP
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-fmtz7
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: gke-be-like-cluster-default-pool-f4ef5de3-gsnr
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: kube-api-access-fmtz7
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+status:
+  conditions:
+  - lastProbeTime: null
+    lastTransitionTime: "2022-06-22T07:00:32Z"
+    status: "True"
+    type: Initialized
+  - lastProbeTime: null
+    lastTransitionTime: "2022-06-22T07:00:34Z"
+    status: "True"
+    type: Ready
+  - lastProbeTime: null
+    lastTransitionTime: "2022-06-22T07:00:34Z"
+    status: "True"
+    type: ContainersReady
+  - lastProbeTime: null
+    lastTransitionTime: "2022-06-22T07:00:32Z"
+    status: "True"
+    type: PodScheduled
+  containerStatuses:
+  - containerID: containerd://a9514b2801db295f081132a08666728582b124401502865cd3fcede44a924922
+    image: docker.io/library/nginx:1.14.2
+    imageID: docker.io/library/nginx@sha256:f7988fb6c02e0ce69257d9bd9cf37ae20a60f1df7563c3a2a6abe24160306b8d
+    lastState: {}
+    name: nginx
+    ready: true
+    restartCount: 0
+    started: true
+    state:
+      running:
+        startedAt: "2022-06-22T07:00:33Z"
+  hostIP: 10.184.0.2
+  phase: Running
+  podIP: 10.120.0.24
+  podIPs:
+  - ip: 10.120.0.24
+  qosClass: BestEffort
+  startTime: "2022-06-22T07:00:32Z"

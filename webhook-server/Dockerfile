@@ -14,8 +14,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build,sharing=private \
   go build -o bin/admission-webhook .
 
 # ---
-FROM scratch AS run
+FROM alpine:3.16.0 AS run
 
 COPY --from=build /work/bin/admission-webhook /usr/local/bin/
+
+WORKDIR /home
 
 CMD ["admission-webhook"]
