@@ -6,21 +6,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/ghodss/yaml"
+	"github.com/sigstore/k8s-manifest-sigstore/pkg/k8smanifest"
 	"github.com/sirupsen/logrus"
 	"github.com/slackhq/simple-kubernetes-webhook/pkg/admission"
 	"google.golang.org/api/iterator"
 
+	k8ssigutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	types "k8s.io/apimachinery/pkg/types"
 )
 
@@ -233,7 +239,163 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading list from storage failed"), err
 	}
 
+	err = downloadPublicKeyFromStorage(folderName, gnupId[0], "gather-n-upload-public-keys")
+	if err != nil {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading public key from storage failed: "), err
+	}
+
+	verified, err := verifyArtifacts()
+	if err != nil {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying process failed"), err
+	}
+
+	rulesMatch, err := rulesValidation()
+	if err != nil {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "rules matching failed"), err
+	}
+
+	if verified == false && rulesMatch == false {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity not valid dan doesn't match rules"), err
+	} else if verified == true && rulesMatch == false {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity valid but doesn't match rules"), err
+	} else if verified == false && rulesMatch == true {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity not valid"), err
+	}
+
 	return reviewResponse(in.Request.UID, true, http.StatusAccepted, ""), err
+}
+
+func clean() error {
+
+	return nil
+}
+
+func rulesValidation() (bool, error) {
+
+	return true, nil
+}
+
+func verifyArtifacts() (bool, error) {
+
+	return true, nil
+}
+
+func verify(filename, imageRef, keyPath, configPath string) error {
+	manifest, err := ioutil.ReadFile(filename)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return nil
+	}
+
+	vo := &k8smanifest.VerifyManifestOption{}
+	if configPath != "" {
+		vo, err = k8smanifest.LoadVerifyManifestConfig(configPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			return nil
+		}
+	}
+	// add signature/message/others annotations to ignore fields
+	vo.SetAnnotationIgnoreFields()
+
+	annotations := k8ssigutil.GetAnnotationsInYAML(manifest)
+	imageRefAnnotationKey := vo.AnnotationConfig.ImageRefAnnotationKey()
+	annoImageRef, annoImageRefFound := annotations[imageRefAnnotationKey]
+	if imageRef == "" && annoImageRefFound {
+		imageRef = annoImageRef
+	}
+	logrus.Debug("annotations", annotations)
+	logrus.Debug("imageRef", imageRef)
+
+	if imageRef != "" {
+		vo.ImageRef = imageRef
+	}
+	if keyPath != "" {
+		vo.KeyPath = keyPath
+	}
+
+	objManifests := k8ssigutil.SplitConcatYAMLs(manifest)
+	verified := false
+	verifiedCount := 0
+	signerName := ""
+	diffMsg := ""
+	var reterr error
+	for _, objManifest := range objManifests {
+		result, verr := k8smanifest.VerifyManifest(objManifest, vo)
+		if verr != nil {
+			reterr = verr
+			break
+		}
+		if result != nil {
+			if result.Verified {
+				signerName = result.Signer
+				verifiedCount += 1
+			} else if result.Diff != nil && result.Diff.Size() > 0 {
+				var obj unstructured.Unstructured
+				_ = yaml.Unmarshal(objManifest, &obj)
+				kind := obj.GetKind()
+				name := obj.GetName()
+				diffMsg = fmt.Sprintf("Diff found in %s %s, diffs:%s", kind, name, result.Diff.String())
+				break
+			}
+		}
+	}
+	if verifiedCount == len(objManifests) {
+		verified = true
+	}
+	if verified {
+		if signerName == "" {
+			logrus.Infof("verifed: %s", strconv.FormatBool(verified))
+		} else {
+			logrus.Infof("verifed: %s, signerName: %s", strconv.FormatBool(verified), signerName)
+		}
+	} else {
+		errMsg := ""
+		if reterr != nil {
+			errMsg = reterr.Error()
+		} else {
+			errMsg = diffMsg
+		}
+		logrus.Fatalf("verifed: %s, error: %s", strconv.FormatBool(verified), errMsg)
+	}
+
+	return nil
+}
+
+func downloadPublicKeyFromStorage(folderName string, gnupId string, bucket string) error {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Second*50)
+	defer cancel()
+
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	destFileName := filepath.Join("public-keys", folderName+".pub")
+	object := gnupId + ".pub"
+
+	f, err := os.Create(destFileName)
+	if err != nil {
+		log.Fatalf("os.Create: %v", err.Error())
+	}
+
+	rc, err := client.Bucket(bucket).Object(object).NewReader(ctx)
+	if err != nil {
+		log.Fatalf("Object(%q).NewReader: %v", object, err.Error())
+	}
+	defer rc.Close()
+
+	if _, err := io.Copy(f, rc); err != nil {
+		log.Fatalf("io.Copy: %v", err)
+	}
+
+	if err = f.Close(); err != nil {
+		log.Fatalf("f.Close: %v", err)
+	}
+
+	return nil
 }
 
 func randStringBytes(n int) string {
@@ -259,13 +421,12 @@ func downloadListFromStorage(folderName string, objectList []string, bucket stri
 	for _, object := range objectList {
 		split := strings.Split(object, "/")
 
-		path := filepath.Join(split[1 : len(split)-1]...)
-		path = filepath.Join(folderName, path)
-
 		destFileName := filepath.Join(split[1:]...)
 		destFileName = filepath.Join(folderName, destFileName)
 
 		if len(split) > 2 {
+			path := filepath.Join(split[1 : len(split)-1]...)
+			path = filepath.Join(folderName, path)
 			if err := os.MkdirAll(path, os.ModePerm); err != nil {
 				log.Fatal(err)
 			}

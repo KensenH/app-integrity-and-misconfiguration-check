@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 # ---
-FROM golang:1.16 AS build
+FROM golang:1.17 AS build
 
 ENV GOOS=linux
 ENV GOARCH=amd64
@@ -17,6 +17,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build,sharing=private \
 FROM alpine:3.16.0 AS run
 
 COPY --from=build /work/bin/admission-webhook /usr/local/bin/
+
+RUN mkdir /home/public-keys
 
 WORKDIR /home
 
