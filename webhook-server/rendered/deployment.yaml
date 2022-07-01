@@ -22,7 +22,7 @@ spec:
             - name: TLS
               value: "true"
             - name: GOOGLE_APPLICATION_CREDENTIALS
-              value: 
+              value: "/etc/admission-webhook/credential/credential.json"
           volumeMounts:
             - name: tls
               mountPath: "/etc/admission-webhook/tls"

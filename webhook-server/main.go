@@ -233,7 +233,48 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading list from storage failed"), err
 	}
 
+	err = downloadPublicKeyFromStorage(folderName, gnupId[0], "gather-n-upload-public-keys")
+	if err != nil {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading public key from storage failed"), err
+	}
+
 	return reviewResponse(in.Request.UID, true, http.StatusAccepted, ""), err
+}
+
+func downloadPublicKeyFromStorage(folderName string, gnupId string, bucket string) error {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Second*50)
+	defer cancel()
+
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	destFileName := filepath.Join("public-keys", folderName+".pub")
+	object := gnupId + ".pub"
+
+	f, err := os.Create(destFileName)
+	if err != nil {
+		log.Fatalf("os.Create: %v", err.Error())
+	}
+
+	rc, err := client.Bucket(bucket).Object(object).NewReader(ctx)
+	if err != nil {
+		log.Fatalf("Object(%q).NewReader: %v", object, err.Error())
+	}
+	defer rc.Close()
+
+	if _, err := io.Copy(f, rc); err != nil {
+		log.Fatalf("io.Copy: %v", err)
+	}
+
+	if err = f.Close(); err != nil {
+		log.Fatalf("f.Close: %v", err)
+	}
+
+	return nil
 }
 
 func randStringBytes(n int) string {
@@ -259,13 +300,12 @@ func downloadListFromStorage(folderName string, objectList []string, bucket stri
 	for _, object := range objectList {
 		split := strings.Split(object, "/")
 
-		path := filepath.Join(split[1 : len(split)-1]...)
-		path = filepath.Join(folderName, path)
-
 		destFileName := filepath.Join(split[1:]...)
 		destFileName = filepath.Join(folderName, destFileName)
 
 		if len(split) > 2 {
+			path := filepath.Join(split[1 : len(split)-1]...)
+			path = filepath.Join(folderName, path)
 			if err := os.MkdirAll(path, os.ModePerm); err != nil {
 				log.Fatal(err)
 			}

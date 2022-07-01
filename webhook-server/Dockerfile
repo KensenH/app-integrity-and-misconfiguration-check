@@ -18,6 +18,8 @@ FROM alpine:3.16.0 AS run
 
 COPY --from=build /work/bin/admission-webhook /usr/local/bin/
 
+RUN mkdir /home/public-keys
+
 WORKDIR /home
 
 CMD ["admission-webhook"]
