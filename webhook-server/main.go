@@ -244,7 +244,7 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading public key from storage failed: "), err
 	}
 
-	verified, err := verifyArtifacts()
+	verified, err := verifyArtifacts(folderName)
 	if err != nil {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying process failed"), err
 	}
@@ -254,13 +254,19 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "rules matching failed"), err
 	}
 
-	if verified == false && rulesMatch == false {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity not valid dan doesn't match rules"), err
-	} else if verified == true && rulesMatch == false {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity valid but doesn't match rules"), err
-	} else if verified == false && rulesMatch == true {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity not valid"), err
+	if !verified {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed integrity test"), err
 	}
+
+	fmt.Println(rulesMatch)
+
+	// if verified == false && rulesMatch == false {
+	// 	return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity not valid dan doesn't match rules"), err
+	// } else if verified == true && rulesMatch == false {
+	// 	return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity valid but doesn't match rules"), err
+	// } else if verified == false && rulesMatch == true {
+	// 	return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity not valid"), err
+	// }
 
 	return reviewResponse(in.Request.UID, true, http.StatusAccepted, ""), err
 }
@@ -275,16 +281,33 @@ func rulesValidation() (bool, error) {
 	return true, nil
 }
 
-func verifyArtifacts() (bool, error) {
+func verifyArtifacts(folderName string) (bool, error) {
+
+	//verify manifest
+	inside := folderName + "/Charts/templates/"
+	keyPath := "public-keys" + folderName + ".pub"
+	files, err := ioutil.ReadDir(inside)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		full_path := filepath.Join(inside, file.Name())
+		verify(full_path, "", keyPath, "")
+
+	}
 
 	return true, nil
 }
 
-func verify(filename, imageRef, keyPath, configPath string) error {
+func verify(filename, imageRef, keyPath, configPath string) (bool, error) {
 	manifest, err := ioutil.ReadFile(filename)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
-		return nil
+		return false, nil
 	}
 
 	vo := &k8smanifest.VerifyManifestOption{}
@@ -292,7 +315,7 @@ func verify(filename, imageRef, keyPath, configPath string) error {
 		vo, err = k8smanifest.LoadVerifyManifestConfig(configPath)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
-			return nil
+			return false, nil
 		}
 	}
 	// add signature/message/others annotations to ignore fields
@@ -349,6 +372,7 @@ func verify(filename, imageRef, keyPath, configPath string) error {
 		} else {
 			logrus.Infof("verifed: %s, signerName: %s", strconv.FormatBool(verified), signerName)
 		}
+		return true, nil
 	} else {
 		errMsg := ""
 		if reterr != nil {
@@ -357,9 +381,8 @@ func verify(filename, imageRef, keyPath, configPath string) error {
 			errMsg = diffMsg
 		}
 		logrus.Fatalf("verifed: %s, error: %s", strconv.FormatBool(verified), errMsg)
+		return false, nil
 	}
-
-	return nil
 }
 
 func downloadPublicKeyFromStorage(folderName string, gnupId string, bucket string) error {
