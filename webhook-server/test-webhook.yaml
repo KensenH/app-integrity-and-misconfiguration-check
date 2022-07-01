@@ -1,9 +1,6 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  annotations:
-    cosign.sigstore.dev/message: H4sIAAAAAAAA/wDzAAz/H4sIAAAAAAAA/+zQzU7DMAwH8J7zFHmBrq7XtVWeYifuXmuVqMSpEvP59KgTTHBAaFwQor+L5cT/REmlYamGGJbEOXuZSqVUTi/laWy4x4F77KhSzlo+8uk2xhl3zxTuimsAALRts9a6O8DHeoYIRd3gYY9dC9AWgPsWsLBw1S0/dJ+VUgEws2SWr+e+2397y6X+EbT4G07ZR3H2oTazl9HZYxxNYKWRlJyxViiwszJ5eTJ54WFdG6IoeeGU1660PtD0PuTqXd3s0Fj7Obv2S0x6jqyhyyHHmNTZHsxv/8dms9n8F68BAAD//3yTUOEACAAAAQAA//9AzMpy8wAAAA==
-    cosign.sigstore.dev/signature: MEUCIQCwa3axgVU2u+deFu6rxc+Q4WNXbjGqFFn0//iEFy3pCQIgCn5TNrs0y8lExsDzZeafbLcFNXCFk2udhZu3Yal+X/U=
   name: ubuntu
   labels:
     app: ubuntu

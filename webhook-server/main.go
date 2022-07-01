@@ -18,6 +18,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/ghodss/yaml"
+	"github.com/r3labs/diff"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/k8smanifest"
 	"github.com/sirupsen/logrus"
 	"github.com/slackhq/simple-kubernetes-webhook/pkg/admission"
@@ -246,16 +247,23 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 
 	verified, err := verifyArtifacts(folderName)
 	if err != nil {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying process failed"), err
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying artifacts process failed"), err
+	}
+	if !verified {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed artifacts integrity test"), err
+	}
+
+	verified, err = verifyManifest(folderName, gnupId[1], obj)
+	if err != nil {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying manifest process failed"), err
+	}
+	if !verified {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed manifest integrity test"), err
 	}
 
 	rulesMatch, err := rulesValidation()
 	if err != nil {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "rules matching failed"), err
-	}
-
-	if !verified {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed integrity test"), err
 	}
 
 	fmt.Println(rulesMatch)
@@ -281,11 +289,38 @@ func rulesValidation() (bool, error) {
 	return true, nil
 }
 
+func verifyManifest(folderName string, filename string, to map[string]interface{}) (bool, error) {
+	var from map[string]interface{}
+	filePath := filepath.Join(folderName, "Charts", "templates", filename)
+
+	fromByte, err := os.ReadFile(filePath)
+	if err != nil {
+		logrus.Errorf("error while reading file %s : %w", filePath, err)
+		return false, err
+	}
+
+	err = yaml.Unmarshal(fromByte, &from)
+	if err != nil {
+		logrus.Errorf("error while unmarshaling yaml %s : %w", filePath, err)
+		return false, err
+	}
+
+	changelog, _ := diff.Diff(from, to)
+	for _, log := range changelog {
+		if log.Type == "update" || log.Type == "delete" {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
 func verifyArtifacts(folderName string) (bool, error) {
 
 	//verify manifest
 	inside := folderName + "/Charts/templates/"
-	keyPath := "public-keys" + folderName + ".pub"
+	keyFilename := folderName + ".pub"
+	keyPath := filepath.Join("public-keys", keyFilename)
 	files, err := ioutil.ReadDir(inside)
 	if err != nil {
 		log.Fatal(err)
@@ -296,8 +331,14 @@ func verifyArtifacts(folderName string) (bool, error) {
 			continue
 		}
 		full_path := filepath.Join(inside, file.Name())
-		verify(full_path, "", keyPath, "")
+		verified, err := verify(full_path, "", keyPath, "")
+		if err != nil {
+			logrus.Infof("error when verifying %s : %w\n", full_path, err)
+		}
 
+		if !verified {
+			return false, nil
+		}
 	}
 
 	return true, nil
@@ -358,7 +399,7 @@ func verify(filename, imageRef, keyPath, configPath string) (bool, error) {
 				_ = yaml.Unmarshal(objManifest, &obj)
 				kind := obj.GetKind()
 				name := obj.GetName()
-				diffMsg = fmt.Sprintf("Diff found in %s %s, diffs:%s", kind, name, result.Diff.String())
+				diffMsg = fmt.Sprintf("Diff found in %s %s, diffs:%s\n", kind, name, result.Diff.String())
 				break
 			}
 		}
@@ -368,9 +409,9 @@ func verify(filename, imageRef, keyPath, configPath string) (bool, error) {
 	}
 	if verified {
 		if signerName == "" {
-			logrus.Infof("verifed: %s", strconv.FormatBool(verified))
+			logrus.Infof("verified: %s\n", strconv.FormatBool(verified))
 		} else {
-			logrus.Infof("verifed: %s, signerName: %s", strconv.FormatBool(verified), signerName)
+			logrus.Infof("verified: %s, signerName: %s\n", strconv.FormatBool(verified), signerName)
 		}
 		return true, nil
 	} else {
@@ -380,7 +421,7 @@ func verify(filename, imageRef, keyPath, configPath string) (bool, error) {
 		} else {
 			errMsg = diffMsg
 		}
-		logrus.Fatalf("verifed: %s, error: %s", strconv.FormatBool(verified), errMsg)
+		logrus.Infof("verified: %s, error: %s\n", strconv.FormatBool(verified), errMsg)
 		return false, nil
 	}
 }
