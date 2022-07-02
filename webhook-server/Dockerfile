@@ -17,6 +17,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build,sharing=private \
 FROM alpine:3.16.0 AS run
 
 COPY --from=build /work/bin/admission-webhook /usr/local/bin/
+COPY config.yaml /home
 
 RUN mkdir /home/public-keys
 

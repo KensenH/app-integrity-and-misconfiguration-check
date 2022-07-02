@@ -21,21 +21,34 @@ import (
 	"github.com/r3labs/diff"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/k8smanifest"
 	"github.com/sirupsen/logrus"
-	"github.com/slackhq/simple-kubernetes-webhook/pkg/admission"
 	"google.golang.org/api/iterator"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	k8ssigutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
+	yaml3 "gopkg.in/yaml.v3"
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	types "k8s.io/apimachinery/pkg/types"
 )
 
 const letterBytes = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+var config *Config
+
+func init() {
+	cfg, err := os.ReadFile("config.yaml")
+	if err != nil {
+		logrus.Errorf("init config failed : %t", err)
+	}
+
+	err = yaml3.Unmarshal(cfg, &config)
+	if err != nil {
+		logrus.Errorf("init config failed : %t", err)
+	}
+}
+
 func main() {
 	setLogger()
-
 	// handle our core application
 	http.HandleFunc("/validate", ServeValidate)
 	// http.HandleFunc("/mutate-pods", ServeMutatePods)
@@ -82,46 +95,6 @@ func ServeValidate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := validateManifest(obj, in)
-	if err != nil {
-		e := fmt.Sprintf("could not generate admission response: %v", err)
-		logger.Error(e)
-		http.Error(w, e, http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	jout, err := json.Marshal(out)
-	if err != nil {
-		e := fmt.Sprintf("could not parse admission response: %v", err)
-		logger.Error(e)
-		http.Error(w, e, http.StatusInternalServerError)
-		return
-	}
-
-	logger.Debug("sending response")
-	logger.Debugf("%s", jout)
-	fmt.Fprintf(w, "%s", jout)
-}
-
-// ServeMutatePods returns an admission review with pod mutations as a json patch
-// in the review response
-func ServeMutatePods(w http.ResponseWriter, r *http.Request) {
-	logger := logrus.WithField("uri", r.RequestURI)
-	logger.Debug("received mutation request")
-
-	in, err := parseRequest(*r)
-	if err != nil {
-		logger.Error(err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	adm := admission.Admitter{
-		Logger:  logger,
-		Request: in.Request,
-	}
-
-	out, err := adm.MutatePodReview()
 	if err != nil {
 		e := fmt.Sprintf("could not generate admission response: %v", err)
 		logger.Error(e)
@@ -197,25 +170,25 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 
 	//check namespace if not default then, approve
 	namespace := objMetadata["namespace"].(string)
-	if namespace != "default" {
-		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "namespace not default"), err
+	if !contains(config.NamespaceRestricted, namespace) {
+		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "namespace not restricted"), nil
 	}
 
 	//check if resource have parent, if yes then approve
 	if _, ok := objMetadata["ownerReferences"]; ok {
-		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "child resource"), err
+		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "child resource"), nil
 	}
 
 	//check if there is cosign signature and gnup-id
 	objAnnotations := objMetadata["annotations"].(map[string]interface{})
 	if _, ok := objAnnotations["cosign.sigstore.dev/message"]; !ok {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/message annotation not found"), err
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/message annotation not found"), nil
 	}
 	if _, ok := objAnnotations["cosign.sigstore.dev/signature"]; !ok {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/signature annotation not found"), err
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/signature annotation not found"), nil
 	}
 	if _, ok := objAnnotations["gnup-id"]; !ok {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "gnup-id annotation not found"), err
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "gnup-id annotation not found"), nil
 	}
 
 	gnupId := strings.Split(objAnnotations["gnup-id"].(string), "_")
@@ -230,17 +203,17 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 	}
 
 	//list all object related to gnup-id
-	objectList, err := getObjectList(gnupId[0]+"_artifacts/", "", "gather-n-upload-artifacts")
+	objectList, err := getObjectList(gnupId[0]+"_artifacts/", "", config.BackendStorage.ArtifactsBucketName)
 	if err != nil {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "listing object failed"), err
 	}
 
-	err = downloadListFromStorage(folderName, objectList, "gather-n-upload-artifacts")
+	err = downloadListFromStorage(folderName, objectList, config.BackendStorage.ArtifactsBucketName)
 	if err != nil {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading list from storage failed"), err
 	}
 
-	err = downloadPublicKeyFromStorage(folderName, gnupId[0], "gather-n-upload-public-keys")
+	err = downloadPublicKeyFromStorage(folderName, gnupId[0], config.BackendStorage.PublicKeysBucketName)
 	if err != nil {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading public key from storage failed: "), err
 	}
@@ -261,20 +234,14 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed manifest integrity test"), err
 	}
 
-	rulesMatch, err := rulesValidation()
+	rulesMatch, msg, err := rulesValidation(config.Rules, folderName, gnupId[1])
 	if err != nil {
 		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "rules matching failed"), err
 	}
 
-	fmt.Println(rulesMatch)
-
-	// if verified == false && rulesMatch == false {
-	// 	return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity not valid dan doesn't match rules"), err
-	// } else if verified == true && rulesMatch == false {
-	// 	return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity valid but doesn't match rules"), err
-	// } else if verified == false && rulesMatch == true {
-	// 	return reviewResponse(in.Request.UID, false, http.StatusAccepted, "integrity not valid"), err
-	// }
+	if !rulesMatch {
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, msg), err
+	}
 
 	return reviewResponse(in.Request.UID, true, http.StatusAccepted, ""), err
 }
@@ -284,9 +251,94 @@ func clean() error {
 	return nil
 }
 
-func rulesValidation() (bool, error) {
+func rulesValidation(rules Rules, folderName string, filename string) (bool, string, error) {
+	//OWASP Dependency Check
+	var dependencyCheckOutput DependencyCheckOutput
+	result := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+	severityScore := map[string]int{"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+	dependencyCheckOutputPath := filepath.Join(folderName, "dependency-check-report.json")
+	dependencyCheckBytes, err := os.ReadFile(dependencyCheckOutputPath)
+	if err != nil {
+		logrus.Errorf("error while reading file %s : %w", &dependencyCheckOutputPath, err)
+		return false, "error", err
+	}
+	err = json.Unmarshal(dependencyCheckBytes, &dependencyCheckOutput)
 
-	return true, nil
+	for _, dependency := range dependencyCheckOutput.Dependencies {
+		if dependency.Vulnerabilities == nil {
+			continue
+		}
+		var severity string
+		for _, vuln := range dependency.Vulnerabilities {
+			if severity == "" {
+				severity = vuln.Severity
+				continue
+			}
+			if severityScore[vuln.Severity] > severityScore[severity] {
+				severity = vuln.Severity
+			}
+		}
+		result[severity]++
+	}
+
+	if result["CRITICAL"] > rules.OwaspDependencyCheck.MaxCriticalSeverity {
+		return false, "maximum critical cve number exeeded", nil
+	}
+	if result["HIGH"] > rules.OwaspDependencyCheck.MaxHighSeverity {
+		return false, "maximum high cve number exeeded", nil
+	}
+	if result["MEDIUM"] > rules.OwaspDependencyCheck.MaxMediumServerity {
+		return false, "maximum medium cve number exeeded", nil
+	}
+	if result["LOW"] > rules.OwaspDependencyCheck.MaxCriticalSeverity {
+		return false, "maximum low cve number exeeded", nil
+	}
+
+	//kubesec
+	var kubesecOutput KubesecOutput
+	kubesecOuputPath := filepath.Join(folderName, "kubesec-output.json")
+	kubesecBytes, err := os.ReadFile(kubesecOuputPath)
+	if err != nil {
+		logrus.Errorf("error while reading file %s : %w", &kubesecOuputPath, err)
+		return false, "error", err
+	}
+
+	err = json.Unmarshal(kubesecBytes, &kubesecOutput)
+	if err != nil {
+		logrus.Errorf("error while unmarshaling file %s : %w", &kubesecOuputPath, err)
+		return false, "error", err
+	}
+
+	kubesec := false
+
+	for _, mis := range kubesecOutput {
+		split := strings.Split(mis.FileName, "/")
+		mis.FileName = split[len(split)-1]
+		if mis.FileName != filename {
+			continue
+		} else {
+			if mis.Score >= rules.Kubesec.MinScore {
+				kubesec = true
+			}
+			break
+		}
+	}
+
+	if !kubesec {
+		kubesecMsg := "kubesec score is lower than minimum requirement " + string(rune(rules.Kubesec.MinScore))
+		return false, kubesecMsg, nil
+	}
+
+	return true, "passed", nil
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
 func verifyManifest(folderName string, filename string, to map[string]interface{}) (bool, error) {

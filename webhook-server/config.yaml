@@ -1,0 +1,13 @@
+backendStorage:
+  artifacts-bucket-name: "gather-n-upload-artifacts"
+  public-keys-bucket-name: "gather-n-upload-public-keys"
+rules:
+  owasp-dependency-check:
+    max-critical-severity: 1
+    max-high-severity: 5
+    max-medium-serverity: 10
+    max-low-severity: 15
+  kubesec:
+    min-score: 0
+namespaceRestricted:
+  - default

@@ -5,10 +5,11 @@ go 1.17
 require (
 	cloud.google.com/go/storage v1.22.1
 	github.com/ghodss/yaml v1.0.0
+	github.com/r3labs/diff v1.1.0
 	github.com/sigstore/k8s-manifest-sigstore v0.3.0
 	github.com/sirupsen/logrus v1.8.1
-	github.com/slackhq/simple-kubernetes-webhook v0.0.0-20211014080913-8b884847badb
 	google.golang.org/api v0.86.0
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	k8s.io/api v0.23.5
 	k8s.io/apimachinery v0.23.5
 )
@@ -182,7 +183,6 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/protocolbuffers/txtpbfmt v0.0.0-20201118171849-f6a6b3f636fc // indirect
-	github.com/r3labs/diff v1.1.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/russross/blackfriday v1.6.0 // indirect
@@ -215,7 +215,6 @@ require (
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
 	github.com/urfave/cli v1.22.5 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
-	github.com/wI2L/jsondiff v0.1.0 // indirect
 	github.com/xanzy/go-gitlab v0.64.0 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
@@ -272,7 +271,6 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/apiextensions-apiserver v0.23.4 // indirect
 	k8s.io/cli-runtime v0.23.5 // indirect
 	k8s.io/client-go v0.23.5 // indirect
