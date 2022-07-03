@@ -16,12 +16,15 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/sigstore/cosign/cmd/cosign/cli/generate"
+	"github.com/sigstore/cosign/cmd/cosign/cli/options"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/k8smanifest"
+	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
+
+	cosign_sign "github.com/sigstore/cosign/cmd/cosign/cli/sign"
 	k8smnfutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	kubeutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util/kubeutil"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
 )
 
 const letterBytes = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -71,6 +74,7 @@ var goCmd = &cobra.Command{
 		//check if backend storage's credential is set
 		if !envExist("GOOGLE_APPLICATION_CREDENTIALS") {
 			log.Errorf("backend storage credentials is not set, use 'export GOOGLE_APPLICATION_CREDENTIALS=path/to/key' to setup credential")
+			os.Exit(1)
 		}
 
 		//move all flags inputted to struct
@@ -118,6 +122,7 @@ var goCmd = &cobra.Command{
 			log.Errorf("upload public key: %w", err)
 			os.Exit(1)
 		}
+
 	},
 }
 
@@ -223,7 +228,7 @@ func gatherArtifacts(id string, flags FlagsInput, dirname string) error {
 	inside := filepath.Join(dirname, "/Charts/templates")
 	files, err := ioutil.ReadDir(inside)
 	if err != nil {
-		log.Errorf("reading rendered charts failed\n")
+		log.Errorf("reading rendered charts %s failed\n", inside)
 		return err
 	}
 
@@ -271,6 +276,30 @@ func gatherArtifacts(id string, flags FlagsInput, dirname string) error {
 	} else {
 		err = copyFile(flags.kubesecOutput, dirname+"/kubesec-output.json")
 		if err != nil {
+			return err
+		}
+	}
+
+	files, err = ioutil.ReadDir(dirname)
+	if err != nil {
+		log.Errorf("reading rendered charts %s failed\n", inside)
+		return err
+	}
+
+	blobSignature := filepath.Join(dirname, "blob-signature")
+	err = os.Mkdir(blobSignature, 0755)
+	if err != nil {
+		log.Errorf("error creating directory blob-signature : %w\n", err)
+		return err
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		err = sign_blob(file.Name(), dirname)
+		if err != nil {
+			log.Errorf("gatherArtifacts - signing manifest %s failed\n", file.Name())
 			return err
 		}
 	}
@@ -374,6 +403,77 @@ func makeKeyPair(ctx context.Context) error {
 func envExist(name string) bool {
 	_, exist := os.LookupEnv(name)
 	return exist
+}
+
+func sign_blob(blob string, dirname string) error {
+	ro := &options.RootOptions{}
+	split := strings.Split(blob, ".")
+	signatureName := split[0] + ".signature"
+
+	securityKeyOptions := options.SecurityKeyOptions{
+		Use:  false,
+		Slot: "",
+	}
+	fulcioOptions := options.FulcioOptions{
+		URL:                      "https://fulcio.sigstore.dev",
+		IdentityToken:            "",
+		InsecureSkipFulcioVerify: false,
+	}
+	rekor := options.RekorOptions{
+		URL: "https://rekor.sigstore.dev",
+	}
+	oidc := options.OIDCOptions{
+		Issuer:      "https://oauth2.sigstore.dev/auth",
+		ClientID:    "sigstore",
+		RedirectURL: "",
+	}
+	registry := options.RegistryOptions{
+		AllowInsecure:      false,
+		KubernetesKeychain: false,
+	}
+
+	o := &options.SignBlobOptions{
+		Key:               "cosign.key",
+		Base64Output:      true,
+		Output:            "",
+		OutputSignature:   filepath.Join(dirname, "blob-signature", signatureName),
+		OutputCertificate: "",
+		SecurityKey:       securityKeyOptions,
+		Fulcio:            fulcioOptions,
+		Rekor:             rekor,
+		OIDC:              oidc,
+		Registry:          registry,
+		BundlePath:        "",
+	}
+
+	oidcClientSecret, err := o.OIDC.ClientSecret()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	ko := cosign_sign.KeyOpts{
+		KeyRef:                   o.Key,
+		PassFunc:                 generate.GetPass,
+		Sk:                       o.SecurityKey.Use,
+		Slot:                     o.SecurityKey.Slot,
+		FulcioURL:                o.Fulcio.URL,
+		IDToken:                  o.Fulcio.IdentityToken,
+		InsecureSkipFulcioVerify: o.Fulcio.InsecureSkipFulcioVerify,
+		RekorURL:                 o.Rekor.URL,
+		OIDCIssuer:               o.OIDC.Issuer,
+		OIDCClientID:             o.OIDC.ClientID,
+		OIDCClientSecret:         oidcClientSecret,
+		OIDCRedirectURL:          o.OIDC.RedirectURL,
+		BundlePath:               o.BundlePath,
+	}
+
+	if _, err := cosign_sign.SignBlobCmd(ro, ko, o.Registry, blob, o.Base64Output, o.OutputSignature, o.OutputCertificate); err != nil {
+		log.Errorf("signing %s: %w", blob, err)
+		return err
+	}
+
+	return nil
 }
 
 func sign(inputDir, imageRef, keyPath, output string, applySignatureConfigMap, updateAnnotation bool, annotations []string) error {

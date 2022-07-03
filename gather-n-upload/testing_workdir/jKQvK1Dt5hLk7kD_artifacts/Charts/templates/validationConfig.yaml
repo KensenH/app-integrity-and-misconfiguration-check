@@ -1,0 +1,54 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cosign.sigstore.dev/message: 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
+    cosign.sigstore.dev/signature: MEUCICskRk9IS/hwEhsN/RzMRxRgGnNohM7YYe6bDJMmRZIhAiEAyzcliWjh9v3u8s6xn+nGtSvqz5xhfysKU8aYpPqGyM8=
+    gnup-id: jKQvK1Dt5hLk7kD_validationConfig.yaml
+  name: kubernetes-webhook.acme.com
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    caBundle: |-
+      LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURTVENDQWpHZ0F3SUJBZ0lVQnpCSFlVQTBs
+      MWlmUjhJYVcwQ3hBc1NXOWlVd0RRWUpLb1pJaHZjTkFRRUwKQlFBd05ERUxNQWtHQTFVRUJoTUNR
+      VlV4SlRBakJnTlZCQU1NSEdGa2JXbHpjMmx2YmkxamIyNTBjbTlzYkdWeQpMWGRsWW1odmIyc3dI
+      aGNOTWpJd05qRTNNVFV3TlRNM1doY05Nak13TmpFM01UVXdOVE0zV2pBME1Rc3dDUVlEClZRUUdF
+      d0pCVlRFbE1DTUdBMVVFQXd3Y1lXUnRhWE56YVc5dUxXTnZiblJ5YjJ4c1pYSXRkMlZpYUc5dmF6
+      Q0MKQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFMdUlGVFBSY05aUFAv
+      c004L2FnTU1UNwphWE96OE5kQzFpd05xVXdTNWVraFo4K0V4cjF0cmlZR1pWdDBOT0QvRnhYWlhU
+      VnhMMCtRQ01NNHVFV3pyRkoyCksrTks2UjBDTEJySkZjZVZIOHdKQStUc1VyMzE1SHFGbGVTUmtt
+      dGY1cnJLdjRaRkpod1hpbkxhYVpvaDE4WDYKV3FlbzVaMjNzOElrTzQ3cVBBS2hJbkcxQUhxUC9j
+      QTFmTGE3VjdNeHZOWjh0RFJpcUFwbkd0Vk0wNWFVenZ1NQpIYnRFTWdTM0gvQUdxb0hIS09oams0
+      dG5DR0M1RXNKTHp4bThTWUFWblNiNTFLMHkrS2MrY2t4QldKRHQ2RlBaCnl2cFJnZTBQYTFHZ3U5
+      L3BrVzBwb1U3d1IxK3pXUnlWTERHdGZheXpsbU1CSHhQenFRZW1lelU0MmhZcVdna0MKQXdFQUFh
+      TlRNRkV3SFFZRFZSME9CQllFRkRCalc5c0RROHE1eUMxcXQ2TjRFMzFDcERWOU1COEdBMVVkSXdR
+      WQpNQmFBRkRCalc5c0RROHE1eUMxcXQ2TjRFMzFDcERWOU1BOEdBMVVkRXdFQi93UUZNQU1CQWY4
+      d0RRWUpLb1pJCmh2Y05BUUVMQlFBRGdnRUJBSTU4Zm1yUURHZUJoRnRSKzZrOEdhTk44VjlOZFZt
+      a1ZCRlQvYTRIakZscTVMR08Kcm5qK2pyN3BuNGNqemdoVlp6N2ovZ29NZ3BsV3BvRXloYTcxRThq
+      V25NY08zS2tpcldLN043MFJtaGo3RzZKNwphaXMyK1o4ZVp6NlFzQU51QWlVRFNwY1FKM0ZyZEFF
+      MkNBOEVxSXhxZUliY2N4WWU3MVFYWDNvaVEyK0ZmMkoxCnNITHFhQkViRERiaWIrQWN4MzlzdStN
+      TDBSNFpHbmNlck5DeHRyTEp4QUNreTBRQUpyNVZwdnRCUTl6U0d3b3kKU2lzT1lCVVBSN3dBWGk0
+      NnlpY1NIQXNwSlNCRE9oandSS01oS1FGbC9RTnFmRXNXT0hzYmtYTDFwQURhcWp1SApUTEFLak1z
+      T1ptd204U2w4MU5DdTVuVUc0b1hCQWVYV0V5RXVyVlU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0t
+      LS0K
+    service:
+      name: admission-controller-webhook
+      namespace: default
+      path: /validate-pods
+      port: 80
+  name: kubernetes-webhook.acme.com
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+    scope: Namespaced
+  sideEffects: NoneOnDryRun
+  timeoutSeconds: 10

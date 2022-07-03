@@ -3,6 +3,7 @@ module gathernupload
 go 1.18
 
 require (
+	cloud.google.com/go/storage v1.23.0
 	github.com/sigstore/cosign v1.8.0
 	github.com/sigstore/k8s-manifest-sigstore v0.3.0
 	github.com/sirupsen/logrus v1.8.1
@@ -15,7 +16,6 @@ require (
 	cloud.google.com/go v0.102.1 // indirect
 	cloud.google.com/go/compute v1.7.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
-	cloud.google.com/go/storage v1.23.0 // indirect
 	cuelang.org/go v0.4.3 // indirect
 	github.com/Azure/azure-sdk-for-go v63.3.0+incompatible // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect

@@ -1,0 +1,10 @@
+[
+  {
+    "object": "Secret/webhook-tls.default",
+    "valid": true,
+    "fileName": "app-integrity-and-misconfiguration-check/gather-n-upload/FP68QyCJVHBJr8c_artifacts/Charts/templates/secrets.yaml",
+    "message": "This resource kind is not supported by kubesec",
+    "score": 0,
+    "scoring": {}
+  }
+]

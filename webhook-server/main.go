@@ -18,12 +18,16 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/ghodss/yaml"
+	"github.com/pkg/errors"
 	"github.com/r3labs/diff"
+	"github.com/sigstore/cosign/cmd/cosign/cli/options"
+	"github.com/sigstore/cosign/cmd/cosign/cli/sign"
 	"github.com/sigstore/k8s-manifest-sigstore/pkg/k8smanifest"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/iterator"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	cosign_verify "github.com/sigstore/cosign/cmd/cosign/cli/verify"
 	k8ssigutil "github.com/sigstore/k8s-manifest-sigstore/pkg/util"
 	yaml3 "gopkg.in/yaml.v3"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -34,6 +38,7 @@ import (
 const letterBytes = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 var config *Config
+var ctx context.Context
 
 func init() {
 	cfg, err := os.ReadFile("config.yaml")
@@ -70,7 +75,6 @@ func main() {
 // ServeHealth returns 200 when things are good
 func ServeHealth(w http.ResponseWriter, r *http.Request) {
 	logrus.WithField("uri", r.RequestURI).Debug("healthy")
-	fmt.Fprint(w, "OK")
 }
 
 // ServeValidatePods validates an admission request and then writes an admission
@@ -386,6 +390,7 @@ func verifyArtifacts(folderName string) (bool, error) {
 		verified, err := verify(full_path, "", keyPath, "")
 		if err != nil {
 			logrus.Infof("error when verifying %s : %w\n", full_path, err)
+			return false, err
 		}
 
 		if !verified {
@@ -393,7 +398,82 @@ func verifyArtifacts(folderName string) (bool, error) {
 		}
 	}
 
+	files, err = ioutil.ReadDir(folderName)
+	if err != nil {
+		log.Fatal(err)
+		return false, err
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		err = verifyBlob(folderName, file.Name())
+		if err != nil {
+			logrus.Infof("error when verifying %s", file.Name())
+			return false, err
+		}
+	}
+
 	return true, nil
+}
+
+func verifyBlob(folderName string, blob string) error {
+	filePath := filepath.Join(folderName, blob)
+	split := strings.Split(blob, ".")
+	signature := split[0] + ".signature"
+	signaturePath := filepath.Join(folderName, "blob-signature", signature)
+	publicKey := folderName + ".pub"
+	keyPath := filepath.Join("public-keys", publicKey)
+
+	securityKey := options.SecurityKeyOptions{
+		Use:  false,
+		Slot: "",
+	}
+	rekor := options.RekorOptions{
+		URL: "https://rekor.sigstore.dev",
+	}
+	certVerify := options.CertVerifyOptions{
+		Cert:           "",
+		CertEmail:      "",
+		CertOidcIssuer: "",
+		CertChain:      "",
+		EnforceSCT:     false,
+	}
+
+	tagPrefix := options.ReferenceOptions{
+		TagPrefix: "",
+	}
+
+	registry := options.RegistryOptions{
+		AllowInsecure:      false,
+		KubernetesKeychain: false,
+		RefOpts:            tagPrefix,
+	}
+	o := &options.VerifyBlobOptions{
+		SecurityKey: securityKey,
+		Key:         keyPath,
+		Signature:   signaturePath,
+		BundlePath:  "",
+		CertVerify:  certVerify,
+		Rekor:       rekor,
+		Registry:    registry,
+	}
+
+	ko := sign.KeyOpts{
+		KeyRef:     o.Key,
+		Sk:         o.SecurityKey.Use,
+		Slot:       o.SecurityKey.Slot,
+		RekorURL:   o.Rekor.URL,
+		BundlePath: o.BundlePath,
+	}
+
+	if err := cosign_verify.VerifyBlobCmd(ctx, ko, o.CertVerify.Cert,
+		o.CertVerify.CertEmail, o.CertVerify.CertOidcIssuer, o.CertVerify.CertChain,
+		o.Signature, filePath, o.CertVerify.EnforceSCT); err != nil {
+		return errors.Wrapf(err, "verifying blob %s", filePath)
+	}
+
+	return nil
 }
 
 func verify(filename, imageRef, keyPath, configPath string) (bool, error) {

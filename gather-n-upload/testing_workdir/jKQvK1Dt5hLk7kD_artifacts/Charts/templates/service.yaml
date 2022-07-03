@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    cosign.sigstore.dev/message: H4sIAAAAAAAA/wA0Acv+H4sIAAAAAAAA/+ySvU7DMBDHM+cp7gVCne/ilW5lKAKxosM5UpPEtuxrETw9SlqhLqiiAwgpv+X88Zd+Z50XPLiFsoPzFII2bcLok/ZjWZZZXV1X1SKQ32tFV+849NFlCCFEVRVjTetSnNaJIq2itMjKOs9FVpaRyNIqyyMQF/p+xC4w+kiIjkwg833u3P3xLV/1n4BOP5IP2hoJ+zTutGkk3B9mHg/E2CCjjAHQGMvI2powbgFas3OJbiS8ru/263TF5fa2q7vV0+mPiQEMDiQBm0GHUZMoa9jbviefvNHz1truGAoOFUlo6AV3PcfBkRpNznqelMm0lLAUk995y1bZXsLDzWY6YfQt8WYKFUUeAwTqSbH1h47RuTON/PU0ZmZmZn6PzwAAAP//FnXWBQAIAAABAAD//6U0Zlg0AQAA
+    cosign.sigstore.dev/signature: MEYCIQD/8vytqMhDMHsRiwivnhK+QLUruXhmoFkXXHXROD0g8gIhAP/vgVSzfFx9eh30ipxXVVotbGWkdkf504VC9cHnraI6
+    gnup-id: jKQvK1Dt5hLk7kD_service.yaml
+  name: admission-controller-webhook
+  namespace: default
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 443
+  selector:
+    app: admission-controller-webhook
