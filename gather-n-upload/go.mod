@@ -1,6 +1,6 @@
 module gathernupload
 
-go 1.18
+go 1.17
 
 require (
 	cloud.google.com/go/storage v1.23.0

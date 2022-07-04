@@ -1,0 +1,14 @@
+key:
+  private-key: ""
+  public-key: ""
+backendStorage:
+  credentials: ""
+  artifacts-bucket-name: "gather-n-upload-artifacts"
+  public-keys-bucket-name: "gather-n-upload-public-keys"
+scanner: 
+  owasp-dependency-check-scan: ""
+  owasp-dependency-check-output: ""
+  kubesec-scan: false
+  kubesec-output: ""
+script:
+  rm: false
