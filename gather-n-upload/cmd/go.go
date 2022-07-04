@@ -25,6 +25,9 @@ type FlagsInput struct {
 	kubesecOutput              string
 	artifactsBucketName        string
 	publicKeysBucketName       string
+	privateKey                 string
+	publicKey                  string
+	rm                         bool
 }
 
 // goCmd represents the go command
@@ -78,6 +81,9 @@ var goCmd = &cobra.Command{
 		kubesecOutput, _ := cmd.Flags().GetString("kubesec-output")
 		artifactsBucketName, _ := cmd.Flags().GetString("artifacts-bucket-name")
 		publicKeysBucketName, _ := cmd.Flags().GetString("public-keys-bucket-name")
+		privateKey, _ := cmd.Flags().GetString("private-key")
+		publicKey, _ := cmd.Flags().GetString("public-key")
+		rm, _ := cmd.Flags().GetBool("rm")
 
 		var flags FlagsInput
 		config, _ := cmd.Flags().GetString("config")
@@ -93,10 +99,10 @@ var goCmd = &cobra.Command{
 				log.Errorf("reading config failed : %t", err)
 				os.Exit(1)
 			}
-			flags = FlagsInput{chartsPath, cfg.BackendStorage.Credentials, cfg.Scanner.OwaspDependencyCheckScan, cfg.Scanner.OwaspDependencyCheckOutput, cfg.Scanner.KubesecScan, cfg.Scanner.KubesecOutput, cfg.BackendStorage.ArtifactsBucketName, cfg.BackendStorage.PublicKeysBucketName}
+			flags = FlagsInput{chartsPath, cfg.BackendStorage.Credentials, cfg.Scanner.OwaspDependencyCheckScan, cfg.Scanner.OwaspDependencyCheckOutput, cfg.Scanner.KubesecScan, cfg.Scanner.KubesecOutput, cfg.BackendStorage.ArtifactsBucketName, cfg.BackendStorage.PublicKeysBucketName, cfg.Key.PrivateKey, cfg.Key.PublicKey, cfg.Script.Rm}
 		} else {
 			//move all flags inputted to struct
-			flags = FlagsInput{chartsPath, backendStorageKey, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput, artifactsBucketName, publicKeysBucketName}
+			flags = FlagsInput{chartsPath, backendStorageKey, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput, artifactsBucketName, publicKeysBucketName, privateKey, publicKey, rm}
 		}
 
 		//check if charts directory inputted is exist
@@ -109,13 +115,27 @@ var goCmd = &cobra.Command{
 		id := randStringBytes(15)
 		dirname := id + "_artifacts"
 
-		err := makeKeyPair(cmd.Context())
-		if err != nil {
-			log.Errorf("creating key: %w", err)
-			os.Exit(1)
+		if flags.privateKey == "" || flags.publicKey == "" {
+			err := makeKeyPair(cmd.Context())
+			if err != nil {
+				log.Errorf("creating key: %w", err)
+				os.Exit(1)
+			}
+		} else {
+			err := copyFile(flags.privateKey, "./cosign.key")
+			if err != nil {
+				log.Errorf("moving private key failed: %w", err)
+				os.Exit(1)
+			}
+
+			err = copyFile(flags.publicKey, "./cosign.pub")
+			if err != nil {
+				log.Errorf("moving public key failed: %w", err)
+				os.Exit(1)
+			}
 		}
 
-		err = gatherArtifacts(id, flags, dirname)
+		err := gatherArtifacts(id, flags, dirname)
 		if err != nil {
 			log.Errorf("gathering artifacts: %w", err)
 			os.Exit(1)
@@ -133,6 +153,10 @@ var goCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		if flags.rm {
+			os.Remove("cosign.key")
+			os.Remove("cosign.pub")
+		}
 	},
 }
 

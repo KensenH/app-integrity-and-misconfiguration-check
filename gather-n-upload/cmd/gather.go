@@ -22,7 +22,6 @@ import (
 )
 
 func gatherArtifacts(id string, flags FlagsInput, dirname string) error {
-
 	//create folder
 	err := os.Mkdir(dirname, 0755)
 	if err != nil {
