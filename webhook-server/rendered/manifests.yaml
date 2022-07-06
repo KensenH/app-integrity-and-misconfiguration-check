@@ -14,7 +14,7 @@ type: kubernetes.io/tls
 apiVersion: v1
 kind: Service
 metadata:
-  name: admission-controller-webhook
+  name: app-integrity-and-misconfiguration-validation-webhook
   namespace: default
 spec:
   ports:
@@ -22,27 +22,27 @@ spec:
       protocol: TCP
       targetPort: 443
   selector:
-    app: admission-controller-webhook
+    app: app-integrity-and-misconfiguration-validation-webhook
 ---
 # Source: Charts/templates/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: admission-controller-webhook
+  name: app-integrity-and-misconfiguration-validation-webhookapp-integrity-and-misconfiguration-validation-webhook
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: admission-controller-webhook
+      app: app-integrity-and-misconfiguration-validation-webhook
   template:
     metadata:
       labels:
-        app: admission-controller-webhook
+        app: app-integrity-and-misconfiguration-validation-webhook
     spec:
       containers:
         - image: kensenh/simple-kubernetes-webhook:latest
-          name: admission-controller-webhook
+          name: app-integrity-and-misconfiguration-validation-webhook
           imagePullPolicy: Always
           env:
             - name: TLS
@@ -59,17 +59,17 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: "kubernetes-webhook.acme.com"
+  name: "app-integrity-and-misconfiguration-validation-webhook"
 webhooks:
-  - name: "kubernetes-webhook.acme.com"
+  - name: "app-integrity-and-misconfiguration-validation-webhook"
     #  namespaceSelector:
     #    matchLabels:
     #      admission-webhook: enabled
     rules:
       - apiGroups: [""]
-        apiVersions: ["v1"]
-        operations: ["CREATE"]
-        resources: ["pods"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["*"]
         scope: "Namespaced"
     clientConfig:
       service:
@@ -77,29 +77,7 @@ webhooks:
         name: admission-controller-webhook
         path: /validate-pods
         port: 80
-      caBundle: |-
-        LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURTVENDQWpHZ0F3SUJBZ0lVSExsR0R0NnJs
-        ZXRYMHhzT1lMVE9oVDk0NFN3d0RRWUpLb1pJaHZjTkFRRUwKQlFBd05ERUxNQWtHQTFVRUJoTUNR
-        VlV4SlRBakJnTlZCQU1NSEdGa2JXbHpjMmx2YmkxamIyNTBjbTlzYkdWeQpMWGRsWW1odmIyc3dI
-        aGNOTWpJd05qSXpNVFl5TkRJMldoY05Nak13TmpJek1UWXlOREkyV2pBME1Rc3dDUVlEClZRUUdF
-        d0pCVlRFbE1DTUdBMVVFQXd3Y1lXUnRhWE56YVc5dUxXTnZiblJ5YjJ4c1pYSXRkMlZpYUc5dmF6
-        Q0MKQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFLYUZVSERwblphRGZX
-        cS9xK3l4Z3JnMQo1U242VWJMRzB5TjRDUmpIMmw1bXAwd3pvMXF5ZVI4V0dRdi9NVENpaDJybmRB
-        Q09Ld0pZR3oxL3BBQmFtT2sxCnVQODBjaVkxdHJ5S2xCS0VqaWRzeUtBeEdQNEJsRGQ0Y1JhbmM3
-        NFlaRTRtWVZWV0pPM2p0aW1RWjJsaGVnMFYKeUlxWTcyR2ZPTmNyUTR6bUdXQTBKKzlHcGtteS9X
-        Qnk0cVlGVS9XUnFkZTNkdHhDdEswZjlDZHhNUW5NOVMwOQowQjNrZmp3U3VuY2RtUWdPTDVBRHVj
-        U3M3M2M1UkNER3lQaUZTaytpM1FMR2tpc2FhNjdZSCtSbUwyL3NjS1JMCkI1d1hvNWZaWXRhV1Nj
-        OG9lbnoxTUQ4TFJkdm52UlFIT0RrU25pMkQ4OXhGNmgwMHViOVlGcU5xM1pvK2hROEMKQXdFQUFh
-        TlRNRkV3SFFZRFZSME9CQllFRkNrOVNlZ01NTndscGRycXJRU3N6V0UwY3RTbE1COEdBMVVkSXdR
-        WQpNQmFBRkNrOVNlZ01NTndscGRycXJRU3N6V0UwY3RTbE1BOEdBMVVkRXdFQi93UUZNQU1CQWY4
-        d0RRWUpLb1pJCmh2Y05BUUVMQlFBRGdnRUJBRldYMjhoZ0JoSDA5cnkrSlBEYVdBbVFZTm5pNjd1
-        U2ZiMXpSOHhqbUwvUlFxMGoKVlB2cnFwU2hxOEYzVGJUK0MxUE4wR0tSd0hXU3k1WHJ5eXB2c0hq
-        Q1VLSVNTZldwcGRXRjlqNzJvUi94MzdYTAowbkhuS3BQZ1I0Ty9MM0JTQk1ic2tkZEtGRHM5d1NC
-        NnljcVp4TDM4WlRSRjQ2dVROcmFiaElDekpvTmp2T1BYCmlWZ3ZOVm1PdlpiNGZWQ3UzR0x4L3ln
-        d1hMZnlwVUZzVTFmS2Zjc2JxNXhZaERkL3dFbkdTRDN2K04rSlBBdTEKa3R2WnVJVEwxVGMwdFp5
-        ZkpHdlhPbGorR0lDZ3ArUTF5RFNiVUhaeExGc05kUEJJSW41VmJBbGxoVzFPNjJzSAppM2VsZ0Mx
-        UjI4OUJQb3ZVT1ZwV081MnJsMHVFZnZtWVc4dWRrZlU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0t
-        LS0K
+      caBundle:  LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURTVENDQWpHZ0F3SUJBZ0lVSExsR0R0NnJs ZXRYMHhzT1lMVE9oVDk0NFN3d0RRWUpLb1pJaHZjTkFRRUwKQlFBd05ERUxNQWtHQTFVRUJoTUNR VlV4SlRBakJnTlZCQU1NSEdGa2JXbHpjMmx2YmkxamIyNTBjbTlzYkdWeQpMWGRsWW1odmIyc3dI aGNOTWpJd05qSXpNVFl5TkRJMldoY05Nak13TmpJek1UWXlOREkyV2pBME1Rc3dDUVlEClZRUUdF d0pCVlRFbE1DTUdBMVVFQXd3Y1lXUnRhWE56YVc5dUxXTnZiblJ5YjJ4c1pYSXRkMlZpYUc5dmF6 Q0MKQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFLYUZVSERwblphRGZX cS9xK3l4Z3JnMQo1U242VWJMRzB5TjRDUmpIMmw1bXAwd3pvMXF5ZVI4V0dRdi9NVENpaDJybmRB Q09Ld0pZR3oxL3BBQmFtT2sxCnVQODBjaVkxdHJ5S2xCS0VqaWRzeUtBeEdQNEJsRGQ0Y1JhbmM3 NFlaRTRtWVZWV0pPM2p0aW1RWjJsaGVnMFYKeUlxWTcyR2ZPTmNyUTR6bUdXQTBKKzlHcGtteS9X Qnk0cVlGVS9XUnFkZTNkdHhDdEswZjlDZHhNUW5NOVMwOQowQjNrZmp3U3VuY2RtUWdPTDVBRHVj U3M3M2M1UkNER3lQaUZTaytpM1FMR2tpc2FhNjdZSCtSbUwyL3NjS1JMCkI1d1hvNWZaWXRhV1Nj OG9lbnoxTUQ4TFJkdm52UlFIT0RrU25pMkQ4OXhGNmgwMHViOVlGcU5xM1pvK2hROEMKQXdFQUFh TlRNRkV3SFFZRFZSME9CQllFRkNrOVNlZ01NTndscGRycXJRU3N6V0UwY3RTbE1COEdBMVVkSXdR WQpNQmFBRkNrOVNlZ01NTndscGRycXJRU3N6V0UwY3RTbE1BOEdBMVVkRXdFQi93UUZNQU1CQWY4 d0RRWUpLb1pJCmh2Y05BUUVMQlFBRGdnRUJBRldYMjhoZ0JoSDA5cnkrSlBEYVdBbVFZTm5pNjd1 U2ZiMXpSOHhqbUwvUlFxMGoKVlB2cnFwU2hxOEYzVGJUK0MxUE4wR0tSd0hXU3k1WHJ5eXB2c0hq Q1VLSVNTZldwcGRXRjlqNzJvUi94MzdYTAowbkhuS3BQZ1I0Ty9MM0JTQk1ic2tkZEtGRHM5d1NC NnljcVp4TDM4WlRSRjQ2dVROcmFiaElDekpvTmp2T1BYCmlWZ3ZOVm1PdlpiNGZWQ3UzR0x4L3ln d1hMZnlwVUZzVTFmS2Zjc2JxNXhZaERkL3dFbkdTRDN2K04rSlBBdTEKa3R2WnVJVEwxVGMwdFp5 ZkpHdlhPbGorR0lDZ3ArUTF5RFNiVUhaeExGc05kUEJJSW41VmJBbGxoVzFPNjJzSAppM2VsZ0Mx UjI4OUJQb3ZVT1ZwV081MnJsMHVFZnZtWVc4dWRrZlU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0t LS0K
     admissionReviewVersions: ["v1", "v1beta1"]
     sideEffects: NoneOnDryRun
     timeoutSeconds: 30

@@ -409,7 +409,7 @@ func verifyArtifacts(folderName string) (bool, error) {
 		}
 		err = verifyBlob(folderName, file.Name())
 		if err != nil {
-			logrus.Infof("error when verifying %s", file.Name())
+			logrus.Errorf("error when verifying %s", file.Name())
 			return false, err
 		}
 	}
@@ -479,7 +479,7 @@ func verifyBlob(folderName string, blob string) error {
 func verify(filename, imageRef, keyPath, configPath string) (bool, error) {
 	manifest, err := ioutil.ReadFile(filename)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		logrus.Errorf(err.Error())
 		return false, nil
 	}
 
@@ -487,7 +487,7 @@ func verify(filename, imageRef, keyPath, configPath string) (bool, error) {
 	if configPath != "" {
 		vo, err = k8smanifest.LoadVerifyManifestConfig(configPath)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
+			logrus.Errorf(err.Error())
 			return false, nil
 		}
 	}
@@ -574,21 +574,23 @@ func downloadPublicKeyFromStorage(folderName string, gnupId string, bucket strin
 
 	f, err := os.Create(destFileName)
 	if err != nil {
-		log.Fatalf("os.Create: %v", err.Error())
+		logrus.Errorf("os.Create: %v", err.Error())
+		return err
 	}
 
 	rc, err := client.Bucket(bucket).Object(object).NewReader(ctx)
 	if err != nil {
-		log.Fatalf("Object(%q).NewReader: %v", object, err.Error())
+		logrus.Errorf("Object(%q).NewReader: %v", object, err.Error())
+		return err
 	}
 	defer rc.Close()
 
 	if _, err := io.Copy(f, rc); err != nil {
-		log.Fatalf("io.Copy: %v", err)
+		logrus.Errorf("io.Copy: %v", err)
 	}
 
 	if err = f.Close(); err != nil {
-		log.Fatalf("f.Close: %v", err)
+		logrus.Errorf("f.Close: %v", err)
 	}
 
 	return nil
@@ -624,27 +626,32 @@ func downloadListFromStorage(folderName string, objectList []string, bucket stri
 			path := filepath.Join(split[1 : len(split)-1]...)
 			path = filepath.Join(folderName, path)
 			if err := os.MkdirAll(path, os.ModePerm); err != nil {
-				log.Fatal(err)
+				logrus.Errorf("downloadListFromStorage - %v", err.Error())
+				return err
 			}
 		}
 
 		f, err := os.Create(destFileName)
 		if err != nil {
-			log.Fatalf("os.Create: %v", err.Error())
+			logrus.Errorf("os.Create: %v", err.Error())
+			return err
 		}
 
 		rc, err := client.Bucket(bucket).Object(object).NewReader(ctx)
 		if err != nil {
-			log.Fatalf("Object(%q).NewReader: %v", object, err.Error())
+			logrus.Errorf("Object(%q).NewReader: %v", object, err.Error())
+			return err
 		}
 		defer rc.Close()
 
 		if _, err := io.Copy(f, rc); err != nil {
-			log.Fatalf("io.Copy: %v", err)
+			logrus.Errorf("io.Copy: %v", err)
+			return err
 		}
 
 		if err = f.Close(); err != nil {
-			log.Fatalf("f.Close: %v", err)
+			logrus.Errorf("f.Close: %v", err)
+			return err
 		}
 
 	}
