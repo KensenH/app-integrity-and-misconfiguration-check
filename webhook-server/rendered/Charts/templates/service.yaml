@@ -1,8 +1,9 @@
+---
 # Source: Charts/templates/service.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: admission-controller-webhook
+  name: app-integrity-and-misconfiguration-validation-webhhook
   namespace: default
 spec:
   ports:
@@ -10,4 +11,4 @@ spec:
       protocol: TCP
       targetPort: 443
   selector:
-    app: admission-controller-webhook
+    app: app-integrity-and-misconfiguration-validation-webhhook

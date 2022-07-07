@@ -260,6 +260,17 @@ func rulesValidation(rules Rules, folderName string, filename string) (bool, str
 	var dependencyCheckOutput DependencyCheckOutput
 	result := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
 	severityScore := map[string]int{"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+
+	//cvss v3 base score
+	attackVector := map[string]int{"NETWORK": 4, "ADJACENT": 3, "LOCAL": 2, "PHYSICAL": 1}
+	attackComplexity := map[string]int{"LOW": 2, "HIGH": 1}
+	privilegesRequired := map[string]int{"NONE": 3, "LOW": 2, "HIGH": 1}
+	userInteraction := map[string]int{"NONE": 2, "REQUIRED": 1}
+	scope := map[string]int{"CHANGED": 2, "UNCHANGED": 1}
+	confidentialityImpact := map[string]int{"HIGH": 3, "LOW": 2, "NONE": 1}
+	integrityImpact := map[string]int{"HIGH": 3, "LOW": 2, "NONE": 1}
+	availabilityImpact := map[string]int{"HIGH": 3, "LOW": 2, "NONE": 1}
+
 	dependencyCheckOutputPath := filepath.Join(folderName, "dependency-check-report.json")
 	dependencyCheckBytes, err := os.ReadFile(dependencyCheckOutputPath)
 	if err != nil {
@@ -269,6 +280,7 @@ func rulesValidation(rules Rules, folderName string, filename string) (bool, str
 	err = json.Unmarshal(dependencyCheckBytes, &dependencyCheckOutput)
 
 	for _, dependency := range dependencyCheckOutput.Dependencies {
+		var cvssv3 Cvssv3
 		if dependency.Vulnerabilities == nil {
 			continue
 		}
@@ -276,12 +288,41 @@ func rulesValidation(rules Rules, folderName string, filename string) (bool, str
 		for _, vuln := range dependency.Vulnerabilities {
 			if severity == "" {
 				severity = vuln.Severity
+				cvssv3 = vuln.Cvssv3
 				continue
 			}
 			if severityScore[vuln.Severity] > severityScore[severity] {
 				severity = vuln.Severity
+				cvssv3 = vuln.Cvssv3
 			}
 		}
+
+		na := "' not acceptable"
+		if attackVector[cvssv3.AttackVector] > attackVector[rules.OwaspDependencyCheck.AcceptableBaseScore.AttackVector] {
+			return false, "cvssv3 - attack vector level '" + cvssv3.AttackVector + na, nil
+		}
+		if attackComplexity[cvssv3.AttackComplexity] > attackComplexity[rules.OwaspDependencyCheck.AcceptableBaseScore.AttackComplexity] {
+			return false, "cvssv3 - attack complexity level '" + cvssv3.AttackComplexity + na, nil
+		}
+		if privilegesRequired[cvssv3.PrivilegesRequired] > privilegesRequired[rules.OwaspDependencyCheck.AcceptableBaseScore.PrivilegesRequired] {
+			return false, "cvssv3 - privileges required level '" + cvssv3.PrivilegesRequired + na, nil
+		}
+		if userInteraction[cvssv3.UserInteraction] > userInteraction[rules.OwaspDependencyCheck.AcceptableBaseScore.UserInteraction] {
+			return false, "cvssv3 - user interaction level '" + cvssv3.UserInteraction + na, nil
+		}
+		if scope[cvssv3.Scope] > scope[rules.OwaspDependencyCheck.AcceptableBaseScore.Scope] {
+			return false, "cvssv3 - scope level '" + cvssv3.Scope + na, nil
+		}
+		if confidentialityImpact[cvssv3.ConfidentialityImpact] > confidentialityImpact[rules.OwaspDependencyCheck.AcceptableBaseScore.ConfidentialityImpact] {
+			return false, "cvssv3 - confidentiality impact level '" + cvssv3.ConfidentialityImpact + na, nil
+		}
+		if integrityImpact[cvssv3.IntegrityImpact] > integrityImpact[rules.OwaspDependencyCheck.AcceptableBaseScore.IntegrityImpact] {
+			return false, "cvssv3 - intergrity impact level '" + cvssv3.IntegrityImpact + na, nil
+		}
+		if availabilityImpact[cvssv3.AvailabilityImpact] > availabilityImpact[rules.OwaspDependencyCheck.AcceptableBaseScore.AvailabilityImpact] {
+			return false, "cvssv3 - availability impact level '" + cvssv3.AvailabilityImpact + na, nil
+		}
+
 		result[severity]++
 	}
 
@@ -500,8 +541,6 @@ func verify(filename, imageRef, keyPath, configPath string) (bool, error) {
 	if imageRef == "" && annoImageRefFound {
 		imageRef = annoImageRef
 	}
-	logrus.Debug("annotations", annotations)
-	logrus.Debug("imageRef", imageRef)
 
 	if imageRef != "" {
 		vo.ImageRef = imageRef

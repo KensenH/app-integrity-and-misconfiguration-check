@@ -20,10 +20,17 @@ spec:
           env:
             - name: TLS
               value: "true"
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/etc/admission-webhook/credential/credential.json"
           volumeMounts:
             - name: tls
               mountPath: "/etc/admission-webhook/tls"
+            - name: credential
+              mountPath: "/etc/admission-webhook/credential"
       volumes:
         - name: tls
           secret:
             secretName: webhook-tls
+        - name: credential
+          secret:
+            secretName: gcp

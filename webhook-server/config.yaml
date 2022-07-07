@@ -4,9 +4,18 @@ backendStorage:
 rules:
   owasp-dependency-check:
     max-critical-severity: 1
-    max-high-severity: 5
+    max-high-severity: 2
     max-medium-serverity: 10
     max-low-severity: 15
+    acceptable-base-score:
+      attack-vector: "NETWORK" #(NETWORK, ADJACENT, LOCAL, PHYSICAL)
+      attack-complexity: "LOW" #(LOW, HIGH)
+      privileges-required: "NONE" #(NONE, LOW, HIGH)
+      user-interaction: "NONE" #(NONE, REQUIRED)
+      scope: "CHANGED" #(UNCHANGED, CHANGED)s
+      confidentiality-impact: "HIGH" #(NONE, LOW, HIGH)
+      integrity-impact: "NONE" #(NONE, LOW, HIGH)
+      availability-impact: "HIGH" #(NONE, LOW, HIGH)
   kubesec:
     min-score: 0
 namespaceRestricted:

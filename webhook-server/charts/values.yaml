@@ -1,6 +1,6 @@
 replicaCount: 1
 
-name: "admission-controller-webhook"
+name: "app-integrity-and-misconfiguration-validation-webhhook"
 
 image:
   name: kensenh/simple-kubernetes-webhook

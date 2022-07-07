@@ -1,22 +1,23 @@
+---
 # Source: Charts/templates/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: admission-controller-webhook
+  name: app-integrity-and-misconfiguration-validation-webhhook
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: admission-controller-webhook
+      app: app-integrity-and-misconfiguration-validation-webhhook
   template:
     metadata:
       labels:
-        app: admission-controller-webhook
+        app: app-integrity-and-misconfiguration-validation-webhhook
     spec:
       containers:
         - image: kensenh/simple-kubernetes-webhook:latest
-          name: admission-controller-webhook
+          name: app-integrity-and-misconfiguration-validation-webhhook
           imagePullPolicy: Always
           env:
             - name: TLS
@@ -28,7 +29,6 @@ spec:
               mountPath: "/etc/admission-webhook/tls"
             - name: credential
               mountPath: "/etc/admission-webhook/credential"
-              readOnly: true
       volumes:
         - name: tls
           secret:
