@@ -8,6 +8,7 @@ type Config struct {
 type BackendStorage struct {
 	ArtifactsBucketName  string `yaml:"artifacts-bucket-name"`
 	PublicKeysBucketName string `yaml:"public-keys-bucket-name"`
+	LogBucketName        string `yaml:"log-bucket-name"`
 }
 type AcceptableBaseScore struct {
 	AttackVector          string `yaml:"attack-vector"`

@@ -83,6 +83,8 @@ func ServeValidate(w http.ResponseWriter, r *http.Request) {
 	logger := logrus.WithField("uri", r.RequestURI)
 	logger.Debug("received validation request")
 
+	var out *admissionv1.AdmissionReview
+
 	in, err := parseRequest(*r)
 	if err != nil {
 		logger.Error(err)
@@ -98,9 +100,22 @@ func ServeValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := validateManifest(obj, in)
+	eventLog := EventLog{UserInfo: in.Request.UserInfo.Username, UID: string(in.Request.UID), Namespace: in.Request.Namespace, Operations: string(in.Request.Operation)}
+
+	out, eventLog.Result, eventLog.ScannerScore, err = validateManifest(obj, in)
+	eventLog.Message = out.Response.Result.Message
+	eventLog.Allowed = out.Response.Allowed
+	logger.Infof("ALLOWED VARIABLE : %s", eventLog.Allowed)
 	if err != nil {
 		e := fmt.Sprintf("could not generate admission response: %v", err)
+		logger.Error(e)
+		http.Error(w, e, http.StatusInternalServerError)
+		return
+	}
+
+	err = logging(eventLog, config.BackendStorage.LogBucketName)
+	if err != nil {
+		e := fmt.Sprintf("error while making log: %v", err)
 		logger.Error(e)
 		http.Error(w, e, http.StatusInternalServerError)
 		return
@@ -118,6 +133,56 @@ func ServeValidate(w http.ResponseWriter, r *http.Request) {
 	logger.Debug("sending response")
 	logger.Debugf("%s", jout)
 	fmt.Fprintf(w, "%s", jout)
+}
+
+func logging(eventLog EventLog, bucketname string) error {
+	var err error
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	now := time.Now().In(loc)
+
+	file, _ := json.MarshalIndent(eventLog, "", " ")
+
+	filename := now.Format("2006-01-02 15:04:05.000000") + ".json"
+	err = ioutil.WriteFile(filename, file, 0644)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	// Creates a client.
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		log.Fatalf("Failed to create client: %v", err)
+		return err
+	}
+	defer client.Close()
+
+	f, err := os.Open(filename)
+	if err != nil {
+		logrus.Errorf("os.Open: %v", err)
+		return err
+	}
+	defer f.Close()
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*50)
+	defer cancel()
+
+	o := client.Bucket(bucketname).Object(filename)
+	o = o.If(storage.Conditions{DoesNotExist: true})
+
+	wc := o.NewWriter(ctx)
+	if _, err = io.Copy(wc, f); err != nil {
+		logrus.Errorf("io.Copy: %v", err)
+		return err
+	}
+	if err := wc.Close(); err != nil {
+		logrus.Errorf("Writer.Close: %v", err)
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "log %v uploaded.\n", filename)
+
+	return err
 }
 
 // setLogger sets the logger using env vars, it defaults to text logs on
@@ -167,32 +232,40 @@ func parseRequest(r http.Request) (*admissionv1.AdmissionReview, error) {
 	return &a, nil
 }
 
-func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionReview) (*admissionv1.AdmissionReview, error) {
-	//Check if this resource spawned by an owner resource
+func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionReview) (*admissionv1.AdmissionReview, []Result, ScannerScore, error) {
 	var err error
+	var resultList []Result
+	var scannerScore ScannerScore
+
+	//Check if this resource spawned by an owner resource
 	objMetadata := obj["metadata"].(map[string]interface{})
 
 	//check namespace if not default then, approve
 	namespace := objMetadata["namespace"].(string)
 	if !contains(config.NamespaceRestricted, namespace) {
-		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "namespace not restricted"), nil
+		resultList = appendResult(resultList, "namespace in scope", false)
+		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "namespace is not restricted"), resultList, scannerScore, err
+	} else {
+		resultList = appendResult(resultList, "namespace in scope", true)
 	}
 
 	//check if resource have parent, if yes then approve
 	if _, ok := objMetadata["ownerReferences"]; ok {
-		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "child resource"), nil
+		resultList = appendResult(resultList, "is child resource", true)
+		return reviewResponse(in.Request.UID, true, http.StatusAccepted, "child resource"), resultList, scannerScore, err
 	}
 
 	//check if there is cosign signature and gnup-id
 	objAnnotations := objMetadata["annotations"].(map[string]interface{})
-	if _, ok := objAnnotations["cosign.sigstore.dev/message"]; !ok {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/message annotation not found"), nil
-	}
-	if _, ok := objAnnotations["cosign.sigstore.dev/signature"]; !ok {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "signature/signature annotation not found"), nil
-	}
-	if _, ok := objAnnotations["gnup-id"]; !ok {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "gnup-id annotation not found"), nil
+
+	sign_annotations := []string{"cosign.sigstore.dev/message", "cosign.sigstore.dev/signature", "gnup-id"}
+
+	for _, annot := range sign_annotations {
+		if _, ok := objAnnotations[annot]; !ok {
+			resultList = appendResult(resultList, annot+" exist", false)
+			return reviewResponse(in.Request.UID, false, http.StatusAccepted, annot+" annotation not found"), resultList, scannerScore, err
+		}
+		resultList = appendResult(resultList, annot+" exist", true)
 	}
 
 	gnupId := strings.Split(objAnnotations["gnup-id"].(string), "_")
@@ -203,61 +276,90 @@ func validateManifest(obj map[string]interface{}, in *admissionv1.AdmissionRevie
 	//create folder with unique name
 	if err := os.Mkdir(folderName, os.ModePerm); err != nil {
 		log.Fatal(err)
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "gnup-id annotation not found"), err
+		resultList = appendResult(resultList, "making gnup-id folder", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "makinzg gnup-id folder failed"), resultList, scannerScore, err
+	} else {
+		resultList = appendResult(resultList, "making gnup-id folder", true)
 	}
 
 	//list all object related to gnup-id
 	objectList, err := getObjectList(gnupId[0]+"_artifacts/", "", config.BackendStorage.ArtifactsBucketName)
 	if err != nil {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "listing object failed"), err
+		resultList = appendResult(resultList, "listing object or artifacts", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "listing object failed or artifacts not found"), resultList, scannerScore, err
 	}
+	resultList = appendResult(resultList, "listing object or artifacts", true)
 
 	err = downloadListFromStorage(folderName, objectList, config.BackendStorage.ArtifactsBucketName)
 	if err != nil {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading list from storage failed"), err
+		resultList = appendResult(resultList, "downloading list from storage", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading list from storage failed"), resultList, scannerScore, err
 	}
+	resultList = appendResult(resultList, "downloading list from storage", true)
 
 	err = downloadPublicKeyFromStorage(folderName, gnupId[0], config.BackendStorage.PublicKeysBucketName)
 	if err != nil {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading public key from storage failed: "), err
+		resultList = appendResult(resultList, "downloading public key from storage", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "downloading public key from storage failed or not found"), resultList, scannerScore, err
 	}
+	resultList = appendResult(resultList, "downloading public key from storage", true)
 
 	verified, err := verifyArtifacts(folderName)
 	if err != nil {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying artifacts process failed"), err
+		resultList = appendResult(resultList, "verifying artifacts process", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying artifacts process failed"), resultList, scannerScore, err
 	}
 	if !verified {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed artifacts integrity test"), err
+		resultList = appendResult(resultList, "verifying artifacts process", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed artifacts integrity test"), resultList, scannerScore, err
 	}
+	resultList = appendResult(resultList, "verifying artifacts process", true)
 
 	verified, err = verifyManifest(folderName, gnupId[1], obj)
 	if err != nil {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying manifest process failed"), err
+		resultList = appendResult(resultList, "verifying manifest process", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "verifying manifest process failed"), resultList, scannerScore, err
 	}
 	if !verified {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed manifest integrity test"), err
+		resultList = appendResult(resultList, "verifying manifest process", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "failed manifest integrity test"), resultList, scannerScore, err
 	}
+	resultList = appendResult(resultList, "verifying manifest process", true)
 
-	rulesMatch, msg, err := rulesValidation(config.Rules, folderName, gnupId[1])
+	rulesMatch, msg, scannerScore, err := rulesValidation(config.Rules, folderName, gnupId[1])
 	if err != nil {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "rules matching failed"), err
+		resultList = appendResult(resultList, "rules match", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, "rules matching failed, error"), resultList, scannerScore, err
 	}
-
 	if !rulesMatch {
-		return reviewResponse(in.Request.UID, false, http.StatusAccepted, msg), err
+		resultList = appendResult(resultList, "rules match", false)
+		return reviewResponse(in.Request.UID, false, http.StatusAccepted, msg), resultList, scannerScore, err
 	}
+	resultList = appendResult(resultList, "rules match", true)
 
-	return reviewResponse(in.Request.UID, true, http.StatusAccepted, ""), err
+	go clean(folderName)
+
+	return reviewResponse(in.Request.UID, true, http.StatusAccepted, ""), resultList, scannerScore, err
 }
 
-func clean() error {
-
-	return nil
+func appendResult(resultList []Result, msg string, pass bool) []Result {
+	result := Result{msg, pass}
+	resultList = append(resultList, result)
+	return resultList
 }
 
-func rulesValidation(rules Rules, folderName string, filename string) (bool, string, error) {
+func clean(folderName string) {
+	keyFilename := folderName + ".pub"
+	keyPath := filepath.Join("public-keys", keyFilename)
+	os.RemoveAll(folderName)
+	os.RemoveAll(keyPath)
+}
+
+func rulesValidation(rules Rules, folderName string, filename string) (bool, string, ScannerScore, error) {
 	//OWASP Dependency Check
 	var dependencyCheckOutput DependencyCheckOutput
+	var scannerScore ScannerScore
+
 	result := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
 	severityScore := map[string]int{"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
@@ -275,9 +377,13 @@ func rulesValidation(rules Rules, folderName string, filename string) (bool, str
 	dependencyCheckBytes, err := os.ReadFile(dependencyCheckOutputPath)
 	if err != nil {
 		logrus.Errorf("error while reading file %s : %w", &dependencyCheckOutputPath, err)
-		return false, "error", err
+		return false, "error", scannerScore, err
 	}
 	err = json.Unmarshal(dependencyCheckBytes, &dependencyCheckOutput)
+	if err != nil {
+		logrus.Errorf("error while unmarshaling bytes : %v", err)
+		return false, "error", scannerScore, err
+	}
 
 	for _, dependency := range dependencyCheckOutput.Dependencies {
 		var cvssv3 Cvssv3
@@ -299,44 +405,54 @@ func rulesValidation(rules Rules, folderName string, filename string) (bool, str
 
 		na := "' not acceptable"
 		if attackVector[cvssv3.AttackVector] > attackVector[rules.OwaspDependencyCheck.AcceptableBaseScore.AttackVector] {
-			return false, "cvssv3 - attack vector level '" + cvssv3.AttackVector + na, nil
+			return false, "cvssv3 - attack vector level '" + cvssv3.AttackVector + na, scannerScore, err
 		}
 		if attackComplexity[cvssv3.AttackComplexity] > attackComplexity[rules.OwaspDependencyCheck.AcceptableBaseScore.AttackComplexity] {
-			return false, "cvssv3 - attack complexity level '" + cvssv3.AttackComplexity + na, nil
+			return false, "cvssv3 - attack complexity level '" + cvssv3.AttackComplexity + na, scannerScore, err
 		}
 		if privilegesRequired[cvssv3.PrivilegesRequired] > privilegesRequired[rules.OwaspDependencyCheck.AcceptableBaseScore.PrivilegesRequired] {
-			return false, "cvssv3 - privileges required level '" + cvssv3.PrivilegesRequired + na, nil
+			return false, "cvssv3 - privileges required level '" + cvssv3.PrivilegesRequired + na, scannerScore, err
 		}
 		if userInteraction[cvssv3.UserInteraction] > userInteraction[rules.OwaspDependencyCheck.AcceptableBaseScore.UserInteraction] {
-			return false, "cvssv3 - user interaction level '" + cvssv3.UserInteraction + na, nil
+			return false, "cvssv3 - user interaction level '" + cvssv3.UserInteraction + na, scannerScore, err
 		}
 		if scope[cvssv3.Scope] > scope[rules.OwaspDependencyCheck.AcceptableBaseScore.Scope] {
-			return false, "cvssv3 - scope level '" + cvssv3.Scope + na, nil
+			return false, "cvssv3 - scope level '" + cvssv3.Scope + na, scannerScore, err
 		}
 		if confidentialityImpact[cvssv3.ConfidentialityImpact] > confidentialityImpact[rules.OwaspDependencyCheck.AcceptableBaseScore.ConfidentialityImpact] {
-			return false, "cvssv3 - confidentiality impact level '" + cvssv3.ConfidentialityImpact + na, nil
+			return false, "cvssv3 - confidentiality impact level '" + cvssv3.ConfidentialityImpact + na, scannerScore, err
 		}
 		if integrityImpact[cvssv3.IntegrityImpact] > integrityImpact[rules.OwaspDependencyCheck.AcceptableBaseScore.IntegrityImpact] {
-			return false, "cvssv3 - intergrity impact level '" + cvssv3.IntegrityImpact + na, nil
+			return false, "cvssv3 - intergrity impact level '" + cvssv3.IntegrityImpact + na, scannerScore, err
 		}
 		if availabilityImpact[cvssv3.AvailabilityImpact] > availabilityImpact[rules.OwaspDependencyCheck.AcceptableBaseScore.AvailabilityImpact] {
-			return false, "cvssv3 - availability impact level '" + cvssv3.AvailabilityImpact + na, nil
+			return false, "cvssv3 - availability impact level '" + cvssv3.AvailabilityImpact + na, scannerScore, err
 		}
 
 		result[severity]++
+		switch severity {
+		case "CRITICAL":
+			scannerScore.Severity.Critical++
+		case "HIGH":
+			scannerScore.Severity.High++
+		case "MEDIUM":
+			scannerScore.Severity.Medium++
+		case "LOW":
+			scannerScore.Severity.Low++
+		}
 	}
 
 	if result["CRITICAL"] > rules.OwaspDependencyCheck.MaxCriticalSeverity {
-		return false, "maximum critical cve number exeeded", nil
+		return false, "maximum critical cve number exeeded", scannerScore, err
 	}
 	if result["HIGH"] > rules.OwaspDependencyCheck.MaxHighSeverity {
-		return false, "maximum high cve number exeeded", nil
+		return false, "maximum high cve number exeeded", scannerScore, err
 	}
 	if result["MEDIUM"] > rules.OwaspDependencyCheck.MaxMediumServerity {
-		return false, "maximum medium cve number exeeded", nil
+		return false, "maximum medium cve number exeeded", scannerScore, err
 	}
 	if result["LOW"] > rules.OwaspDependencyCheck.MaxCriticalSeverity {
-		return false, "maximum low cve number exeeded", nil
+		return false, "maximum low cve number exeeded", scannerScore, err
 	}
 
 	//kubesec
@@ -345,17 +461,17 @@ func rulesValidation(rules Rules, folderName string, filename string) (bool, str
 	kubesecBytes, err := os.ReadFile(kubesecOuputPath)
 	if err != nil {
 		logrus.Errorf("error while reading file %s : %w", &kubesecOuputPath, err)
-		return false, "error", err
+		return false, "error", scannerScore, err
 	}
 
 	err = json.Unmarshal(kubesecBytes, &kubesecOutput)
 	if err != nil {
 		logrus.Errorf("error while unmarshaling file %s : %w", &kubesecOuputPath, err)
-		return false, "error", err
+		return false, "error", scannerScore, err
 	}
 
 	kubesec := false
-
+	var scored int
 	for _, mis := range kubesecOutput {
 		split := strings.Split(mis.FileName, "/")
 		mis.FileName = split[len(split)-1]
@@ -365,16 +481,17 @@ func rulesValidation(rules Rules, folderName string, filename string) (bool, str
 			if mis.Score >= rules.Kubesec.MinScore {
 				kubesec = true
 			}
+			scored = mis.Score
 			break
 		}
 	}
-
+	scannerScore.Kubesec = scored
 	if !kubesec {
-		kubesecMsg := "kubesec score is lower than minimum requirement " + string(rune(rules.Kubesec.MinScore))
-		return false, kubesecMsg, nil
+		kubesecMsg := "kubesec score " + strconv.Itoa(scored) + " is lower than minimum requirement " + strconv.Itoa(rules.Kubesec.MinScore)
+		return false, kubesecMsg, scannerScore, err
 	}
 
-	return true, "passed", nil
+	return true, "passed", scannerScore, err
 }
 
 func contains(s []string, str string) bool {

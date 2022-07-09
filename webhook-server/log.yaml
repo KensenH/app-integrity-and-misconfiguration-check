@@ -1,0 +1,20 @@
+userInfo    : ""
+uid         : ""
+namespace   : ""
+operations  : ""
+allowed     : false
+kubecsec-detail-link: ""
+owasp-dependency-check-detail-link: ""
+scanner-score:
+  severity:
+    critical: 0
+    high: 0
+    medium: 0
+    low: 0
+  kubesec : 0
+result:
+  - name: artifacts integrity test
+    passed: true
+  - name: manifest integrity test
+    passed: false
+message   : ""
