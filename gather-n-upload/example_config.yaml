@@ -1,14 +1,14 @@
 key:
-  private-key: ""
-  public-key: ""
+  private-key: "./cosign.key"
+  public-key: "./cosign.pub"
 backendStorage:
-  credentials: ""
   artifacts-bucket-name: "gather-n-upload-artifacts"
   public-keys-bucket-name: "gather-n-upload-public-keys"
+  log.bucket-name: "event-log"
 scanner: 
   owasp-dependency-check-scan: ""
-  owasp-dependency-check-output: ""
+  owasp-dependency-check-output: "./owasp-dependency-check-report.json"
   kubesec-scan: false
-  kubesec-output: ""
+  kubesec-output: "./kubesec-output.json"
 script:
   rm: false

@@ -75,7 +75,7 @@ func gatherArtifacts(id string, flags FlagsInput, dirname string) error {
 	//Check OWASP Dependency Check Output
 	if _, err := os.Stat(flags.owaspDependencyCheckOutput); errors.Is(err, os.ErrNotExist) {
 		log.Errorf("gatherArtifacts - OWASP Dependency Check output not found")
-		os.Exit(1)
+		return err
 	} else {
 		err = copyFile(flags.owaspDependencyCheckOutput, dirname+"/dependency-check-report.json")
 		if err != nil {
@@ -86,7 +86,7 @@ func gatherArtifacts(id string, flags FlagsInput, dirname string) error {
 	//Check Kubesec Output
 	if _, err := os.Stat(flags.kubesecOutput); errors.Is(err, os.ErrNotExist) {
 		log.Errorf("gatherArtifacts - kubesec output not found")
-		os.Exit(1)
+		return err
 	} else {
 		err = copyFile(flags.kubesecOutput, dirname+"/kubesec-output.json")
 		if err != nil {

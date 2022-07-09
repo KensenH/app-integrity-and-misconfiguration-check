@@ -11,7 +11,6 @@ type Key struct {
 	PublicKey  string `yaml:"public-key"`
 }
 type BackendStorage struct {
-	Credentials          string `yaml:"credentials"`
 	ArtifactsBucketName  string `yaml:"artifacts-bucket-name"`
 	PublicKeysBucketName string `yaml:"public-keys-bucket-name"`
 }

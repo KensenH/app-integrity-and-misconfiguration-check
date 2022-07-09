@@ -7413,19 +7413,19 @@
                         "impactScore": "2.9"
                     },
                     "cvssv3": {
-                        "baseScore": 7.5,
-                        "attackVector": "NETWORK",
-                        "attackComplexity": "LOW",
-                        "privilegesRequired": "NONE",
-                        "userInteraction": "NONE",
-                        "scope": "UNCHANGED",
-                        "confidentialityImpact": "NONE",
-                        "integrityImpact": "NONE",
-                        "availabilityImpact": "HIGH",
-                        "baseSeverity": "HIGH",
-                        "exploitabilityScore": "3.9",
-                        "impactScore": "3.6",
-                        "version": "3.1"
+                            "baseScore": 7.5,
+                            "attackVector": "NETWORK",
+                            "attackComplexity": "LOW",
+                            "privilegesRequired": "NONE",
+                            "userInteraction": "NONE",
+                            "scope": "UNCHANGED",
+                            "confidentialityImpact": "NONE",
+                            "integrityImpact": "NONE",
+                            "availabilityImpact": "HIGH",
+                            "baseSeverity": "HIGH",
+                            "exploitabilityScore": "3.9",
+                            "impactScore": "3.6",
+                            "version": "3.1"
                     },
                     "cwes": [
                         "CWE-502"

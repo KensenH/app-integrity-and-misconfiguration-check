@@ -8,7 +8,7 @@ import (
 
 	"github.com/sigstore/cosign/cmd/cosign/cli/generate"
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
+	"gopkg.in/yaml.v3"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -18,7 +18,6 @@ const filenameIfInputIsDir = "manifest.yaml"
 
 type FlagsInput struct {
 	chartsPath                 string
-	keyPath                    string
 	owaspDependencyCheckScan   string
 	owaspDependencyCheckOutput string
 	kubesecScan                bool
@@ -55,6 +54,7 @@ var goCmd = &cobra.Command{
 	- if config flag is defined then all flags except chart-directory will be ignored.
 	- if private-key is defined but the public-key not or the other way around, the script will generate new key pair instead.
 	- backend storage key need to be set on environment variable GOOGLE_APPLICATION_CREDENTIALS="path/to/credentials.json".
+	- set COSIGN_PASSWORD environment variable to skip passphrase input
 	
 	DEPENDENCIES
 	- HELM
@@ -74,7 +74,6 @@ var goCmd = &cobra.Command{
 		}
 
 		chartsPath, _ := cmd.Flags().GetString("charts-directory")
-		backendStorageKey, _ := cmd.Flags().GetString("backend-storage-key")
 		owaspDependencyCheckScan, _ := cmd.Flags().GetString("owasp-dependency-check-scan")
 		owaspDependencyCheckOutput, _ := cmd.Flags().GetString("owasp-dependency-check-output")
 		kubesecScan, _ := cmd.Flags().GetBool("kubesec-scan")
@@ -88,6 +87,7 @@ var goCmd = &cobra.Command{
 		var flags FlagsInput
 		config, _ := cmd.Flags().GetString("config")
 		if config != "" {
+			log.Infof("config\n")
 			var cfg Config
 			configByte, err := os.ReadFile(config)
 			if err != nil {
@@ -99,10 +99,11 @@ var goCmd = &cobra.Command{
 				log.Errorf("reading config failed : %t", err)
 				os.Exit(1)
 			}
-			flags = FlagsInput{chartsPath, cfg.BackendStorage.Credentials, cfg.Scanner.OwaspDependencyCheckScan, cfg.Scanner.OwaspDependencyCheckOutput, cfg.Scanner.KubesecScan, cfg.Scanner.KubesecOutput, cfg.BackendStorage.ArtifactsBucketName, cfg.BackendStorage.PublicKeysBucketName, cfg.Key.PrivateKey, cfg.Key.PublicKey, cfg.Script.Rm}
+			flags = FlagsInput{chartsPath, cfg.Scanner.OwaspDependencyCheckScan, cfg.Scanner.OwaspDependencyCheckOutput, cfg.Scanner.KubesecScan, cfg.Scanner.KubesecOutput, cfg.BackendStorage.ArtifactsBucketName, cfg.BackendStorage.PublicKeysBucketName, cfg.Key.PrivateKey, cfg.Key.PublicKey, cfg.Script.Rm}
 		} else {
+			log.Infof("not config\n")
 			//move all flags inputted to struct
-			flags = FlagsInput{chartsPath, backendStorageKey, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput, artifactsBucketName, publicKeysBucketName, privateKey, publicKey, rm}
+			flags = FlagsInput{chartsPath, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput, artifactsBucketName, publicKeysBucketName, privateKey, publicKey, rm}
 		}
 
 		//check if charts directory inputted is exist
@@ -171,11 +172,6 @@ func randStringBytes(n int) string {
 
 func makeKeyPair(ctx context.Context) error {
 	var empty_list []string
-
-	_, passphrase := os.LookupEnv("COSIGN_PASSWORD")
-	if !passphrase {
-		os.Setenv("COSIGN_PASSWORD", "")
-	}
 
 	err := generate.GenerateKeyPairCmd(ctx, "", empty_list)
 	if err != nil {
