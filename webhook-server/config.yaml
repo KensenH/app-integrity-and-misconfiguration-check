@@ -18,6 +18,6 @@ rules:
       integrity-impact: "HIGH" #(NONE, LOW, HIGH)
       availability-impact: "HIGH" #(NONE, LOW, HIGH)
   kubesec:
-    min-score: 10
+    min-score: 0
 namespaceRestricted:
   - default

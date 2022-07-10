@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:experimental
 # ---
-FROM golang:1.17 AS build
+FROM golang:1.18 AS build
 
 ENV GOOS=linux
 ENV GOARCH=amd64
@@ -20,6 +20,8 @@ COPY --from=build /work/bin/admission-webhook /usr/local/bin/
 COPY config.yaml /home
 
 RUN mkdir /home/public-keys
+
+RUN apk --no-cache add tzdata
 
 WORKDIR /home
 

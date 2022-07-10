@@ -1,11 +1,13 @@
 module main.go
 
-go 1.17
+go 1.18
 
 require (
 	cloud.google.com/go/storage v1.22.1
 	github.com/ghodss/yaml v1.0.0
+	github.com/pkg/errors v0.9.1
 	github.com/r3labs/diff v1.1.0
+	github.com/sigstore/cosign v1.8.0
 	github.com/sigstore/k8s-manifest-sigstore v0.3.0
 	github.com/sirupsen/logrus v1.8.1
 	google.golang.org/api v0.86.0
@@ -176,7 +178,6 @@ require (
 	github.com/pelletier/go-toml v1.9.4 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
@@ -191,7 +192,6 @@ require (
 	github.com/secure-systems-lab/go-securesystemslib v0.3.1 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
-	github.com/sigstore/cosign v1.8.0 // indirect
 	github.com/sigstore/fulcio v0.1.2-0.20220114150912-86a2036f9bc7 // indirect
 	github.com/sigstore/rekor v0.4.1-0.20220114213500-23f583409af3 // indirect
 	github.com/sigstore/sigstore v1.2.1-0.20220424143412-3d41663116d5 // indirect

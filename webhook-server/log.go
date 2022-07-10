@@ -1,6 +1,7 @@
 package main
 
 type EventLog struct {
+	Time                           string       `json:"time"`
 	UserInfo                       string       `json:"userInfo"`
 	UID                            string       `json:"uid"`
 	Namespace                      string       `json:"namespace"`

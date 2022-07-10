@@ -137,12 +137,18 @@ func ServeValidate(w http.ResponseWriter, r *http.Request) {
 
 func logging(eventLog EventLog, bucketname string) error {
 	var err error
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		return err
+	}
 	now := time.Now().In(loc)
+	timeString := now.Format("2006-01-02 15:04:05.000000")
+
+	eventLog.Time = timeString
 
 	file, _ := json.MarshalIndent(eventLog, "", " ")
 
-	filename := now.Format("2006-01-02 15:04:05.000000") + ".json"
+	filename := timeString + ".json"
 	err = ioutil.WriteFile(filename, file, 0644)
 	if err != nil {
 		return err
@@ -840,6 +846,7 @@ func getObjectList(prefix string, delim string, bucket string) ([]string, error)
 			log.Fatalf("Bucket(%q).Objects(): %v", bucket, err)
 			return nil, err
 		}
+
 		fmt.Fprintln(os.Stdout, attrs.Name)
 		objects = append(objects, attrs.Name)
 	}
