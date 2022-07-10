@@ -1,6 +1,12 @@
 package cmd
 
+type Report struct {
+	Created   string     `json:"created"`
+	EventList []EventLog `json:"eventLog"`
+}
+
 type EventLog struct {
+	Time                           string       `json:"time"`
 	UserInfo                       string       `json:"userInfo"`
 	UID                            string       `json:"uid"`
 	Namespace                      string       `json:"namespace"`

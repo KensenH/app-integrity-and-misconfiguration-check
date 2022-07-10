@@ -1,0 +1,172 @@
+{{define "log"}}
+<html>
+    <head>
+        <script type="text/javascript" src="http://livejs.com/live.js"></script>
+        <h1>Validating Webhook Report</h1>
+        <div>Created in {{.Created}}</div>
+    </head>
+    <body>
+        <div>
+            <table class="table-big" >
+                <tr class="tr-big">
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>UID</th>
+                    <th>Namespace</th>
+                    <th>Operation</th>
+                    <th style="text-align: center;">Passed</th>
+                </tr>
+                {{range $i, $item :=.EventList}}
+                <tr class="event-head" onclick="myFunction('{{$i}}')">
+                    <td>{{$item.Time}}</td>
+                    <td>{{$item.UserInfo}}</td>
+                    <td>{{$item.UID}}</td>
+                    <td>{{$item.Namespace}}</td>
+                    <td>{{$item.Operations}}</td>
+                    {{if $item.Allowed}}
+                    <td class="passed"><img class="passed" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Sign-check-icon.png/800px-Sign-check-icon.png"></td>
+                    {{else}}
+                    <td class="passed"><img class="passed" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Flat_cross_icon.svg/1200px-Flat_cross_icon.svg.png"></td>
+                    {{end}}
+                </tr>
+                <tr class="event-detail" id='{{$i}}'>
+                    <td class="event-td" colspan="6">
+                        <div>
+                            Dependency Check 
+                            <table class="table-dependency-check">
+                                <tr>
+                                    <td class="td-dependency-check">CRITICAL</td>
+                                    <td class="td-dependency-check">:</td>
+                                    <td class="td-dependency-check">{{$item.ScannerScore.Severity.Critical}}</td>
+                                </tr>
+                                <tr>
+                                    <td class="td-dependency-check">HIGH</td>
+                                    <td class="td-dependency-check">:</td>
+                                    <td class="td-dependency-check">{{$item.ScannerScore.Severity.High}}</td>
+                                </tr>
+                                <tr>
+                                    <td class="td-dependency-check">MEDIUM</td>
+                                    <td class="td-dependency-check">:</td>
+                                    <td class="td-dependency-check">{{$item.ScannerScore.Severity.Medium}}</td>
+                                </tr>
+                                <tr>
+                                    <td class="td-dependency-check">LOW</td>
+                                    <td class="td-dependency-check">:</td>
+                                    <td class="td-dependency-check">{{$item.ScannerScore.Severity.Low}}</td>
+                                </tr>
+                            </table>
+                        </div><br>
+                        <div>Kubesec Score : {{$item.ScannerScore.Kubesec}}</div><br>
+                        <div>Message : {{$item.Message}}</div><br>
+                        <table class="table-log">
+                            <tr class="tr-log">
+                                <th>validation</th>
+                                <th style="text-align: center;">status</th>
+                            </tr>
+                            {{range $log := $item.Result}}
+                            <tr class="tr-log">
+                                <td class="td-log">{{$log.Name}}</td>
+                                {{if $log.Passed}}
+                                <td class="td-log"><img class="passed" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Sign-check-icon.png/800px-Sign-check-icon.png"></td>
+                                {{else}}
+                                <td class="td-log"><img class="passed" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Flat_cross_icon.svg/1200px-Flat_cross_icon.svg.png"></td>
+                                {{end}}
+                            </tr>
+                            {{end}}
+                        </table>
+                    </td>
+                </tr>
+                {{end}}
+            </table>
+        </div>
+    </body>
+    </html>
+<style>
+    table {
+        width: auto;
+        text-align: left;
+    }    
+    
+    .table-big {
+        width: 100%;
+        border: 1px solid black;
+    }
+
+    .table-log {
+        background-color: honeydew;
+        width: 100%;
+    }
+
+    div {
+        width: 100%;
+    }
+
+    .event-head:hover {
+        background-color: bisque;
+        color: black;
+        outline: none;
+        cursor: pointer;
+    }
+
+    .event-head {
+        background-color: mintcream;
+    }
+
+    .event-detail {
+        display: none;
+    }
+    
+    .event-td {
+        background-color: aliceblue;
+        padding: 20px;
+        border-bottom: 2px double floralwhite;
+    }
+
+    td img{
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    th {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    td {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .td-dependency-check {
+        padding: 0 15px;
+    }
+
+    .td-log {
+        padding: 5px 0;
+        padding-left: 20px;
+        padding-right: 20px;
+        border-bottom: 1px ;
+    }
+
+    .tr-big {
+        background-color: lightgray;
+    }
+
+    .passed {
+        width: 25;
+        height: 25;
+    }
+</style>
+
+<script>
+    function myFunction(show) {
+        var x = document.getElementById(show);
+      if (x.style.display === "none" || x.style.display == "") {
+          x.style.display = "table-row";
+        } else {
+        x.style.display = "none";
+    }
+    }
+</script>
+{{end}}

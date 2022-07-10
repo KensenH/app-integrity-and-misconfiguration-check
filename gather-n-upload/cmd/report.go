@@ -5,11 +5,15 @@ Copyright © 2022 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"html/template"
 	"io/ioutil"
 	"path/filepath"
 	"time"
+
+	_ "embed"
 
 	"cloud.google.com/go/storage"
 	log "github.com/sirupsen/logrus"
@@ -18,12 +22,16 @@ import (
 	"k8s.io/utils/strings/slices"
 )
 
+//go:embed templates/content.html
+var content_template string
+
 // reportCmd represents the report command
 var reportCmd = &cobra.Command{
 	Use:   "report",
 	Short: "command to pull log report",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
+		var report Report
 		loc, _ := time.LoadLocation("Asia/Jakarta")
 		end := time.Now().In(loc)
 		start := end.Add(-24 * time.Hour)
@@ -31,6 +39,7 @@ var reportCmd = &cobra.Command{
 		output, _ := cmd.Flags().GetString("output")
 		outputdir, _ := cmd.Flags().GetString("output-dir")
 		bucketname, _ := cmd.Flags().GetString("log-bucket")
+		report.Created = end.Format("2006-01-02 15:04:05.000000")
 
 		if !slices.Contains(outputList, output) {
 			log.Fatalf("output type %s not found, try [json, html, pdf]", output)
@@ -46,35 +55,60 @@ var reportCmd = &cobra.Command{
 			log.Errorf("error : %w", err)
 		}
 
-		err = createReport(output, outputdir, eventList, end)
+		report.EventList = eventList
+
+		err = createReport(output, outputdir, report, end)
 		if err != nil {
 			log.Errorf("error : %w", err)
 		}
 	},
 }
 
-func createReport(output string, outputDir string, eventList []EventLog, now time.Time) error {
+func createReport(output string, outputDir string, report Report, now time.Time) error {
 	var err error
-
-	errIsDirectoryMsg := "open " + filepath.Join(outputDir) + ": is a directory"
-
 	switch output {
 	case "json":
-		file, err := json.MarshalIndent(eventList, "", "")
+		file, err := json.MarshalIndent(report, "", "")
 		if err != nil {
 			return err
 		}
-		err = ioutil.WriteFile(outputDir, file, 0664)
+
+		err = write(outputDir, file, now, output)
 		if err != nil {
-			if err.Error() == errIsDirectoryMsg {
-				newPath := filepath.Join(outputDir, now.Format("2006-01-02 15:04:05.000000"+".json"))
-				ioutil.WriteFile(newPath, file, 0664)
-			} else {
-				return err
-			}
+			return err
 		}
+
 	case "html":
+		var rendered bytes.Buffer
+		template, err := template.New("html").Parse(content_template)
+		if err != nil {
+			log.Errorf("error : %w", err)
+		}
+		template.ExecuteTemplate(&rendered, "log", report)
+
+		err = write(outputDir, rendered.Bytes(), now, output)
+		if err != nil {
+			return err
+		}
+
 	case "pdf":
+	}
+
+	return err
+}
+
+func write(outputDir string, data []byte, now time.Time, output string) error {
+	var err error
+
+	errIsDirectoryMsg := "open " + filepath.Join(outputDir) + ": is a directory"
+	err = ioutil.WriteFile(outputDir, data, 0664)
+	if err != nil {
+		if err.Error() == errIsDirectoryMsg {
+			newPath := filepath.Join(outputDir, now.Format("2006-01-02 15:04:05.000000"+"."+output))
+			ioutil.WriteFile(newPath, data, 0664)
+		} else {
+			return err
+		}
 	}
 
 	return err
