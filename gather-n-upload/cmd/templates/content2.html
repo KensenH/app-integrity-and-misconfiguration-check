@@ -8,29 +8,25 @@
     <body>
         <div>
             <table class="table-big" >
-                <tr class="tr-big">
-                    <th>Time</th>
-                    <th>User</th>
-                    <th>UID</th>
-                    <th>Namespace</th>
-                    <th>Operation</th>
-                    <th style="text-align: center;">Passed</th>
-                </tr>
                 {{range $i, $item :=.EventList}}
-                <tr class="event-head" onclick="myFunction('{{$i}}')">
-                    <td>{{$item.Time}}</td>
-                    <td>{{$item.UserInfo}}</td>
-                    <td>{{$item.UID}}</td>
-                    <td>{{$item.Namespace}}</td>
-                    <td>{{$item.Operations}}</td>
-                    {{if $item.Allowed}}
-                    <td class="passed"><img class="passed" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Sign-check-icon.png/800px-Sign-check-icon.png"></td>
-                    {{else}}
-                    <td class="passed"><img class="passed" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Flat_cross_icon.svg/1200px-Flat_cross_icon.svg.png"></td>
-                    {{end}}
-                </tr>
                 <tr class="event-detail" id='{{$i}}'>
                     <td class="event-td" colspan="6">
+                        <div class="event-header">
+                            <b>{{$item.Time}}</b>
+                        </div>
+                        <table style="width: 100%;">
+                            <tr class="event-head">
+                                <td>{{$item.UserInfo}}</td>
+                                <td>{{$item.UID}}</td>
+                                <td>{{$item.Namespace}}</td>
+                                <td>{{$item.Operations}}</td>
+                                {{if $item.Allowed}}
+                                <td class="passed"><img class="passed" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Sign-check-icon.png/800px-Sign-check-icon.png"></td>
+                                {{else}}
+                                <td class="passed"><img class="passed" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/Flat_cross_icon.svg/1200px-Flat_cross_icon.svg.png"></td>
+                                {{end}}
+                            </tr>
+                        </table><br>
                         <div>
                             Dependency Check 
                             <table class="table-dependency-check">
@@ -89,7 +85,7 @@
     
     .table-big {
         width: 100%;
-        border: 1px solid black;
+        border-spacing: 30px;
     }
 
     .table-log {
@@ -112,14 +108,22 @@
         background-color: rgb(164, 247, 205);
     }
 
+    .event-header {
+        width: 100%;
+        background-color: mediumaquamarine;
+        font-size: large;
+        padding-left: 20px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+    }
+
     .event-detail {
-        display: none;
+        display: table-row;
     }
     
     .event-td {
         background-color: aliceblue;
         padding: 20px;
-        border-bottom: 2px double midnightblue;
     }
 
     td img{
@@ -159,14 +163,4 @@
     }
 </style>
 
-<script>
-    function myFunction(show) {
-        var x = document.getElementById(show);
-      if (x.style.display === "none" || x.style.display == "") {
-          x.style.display = "table-row";
-        } else {
-        x.style.display = "none";
-    }
-    }
-</script>
 {{end}}

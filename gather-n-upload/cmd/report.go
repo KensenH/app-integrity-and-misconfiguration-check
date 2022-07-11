@@ -20,23 +20,39 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/api/iterator"
 	"k8s.io/utils/strings/slices"
+
+	"github.com/SebastiaanKlippert/go-wkhtmltopdf"
 )
 
 //go:embed templates/content.html
-var content_template string
+var html_template string
+
+//go:embed templates/content2.html
+var pdf_template string
 
 // reportCmd represents the report command
 var reportCmd = &cobra.Command{
 	Use:   "report",
-	Short: "command to pull log report",
-	Long:  ``,
+	Short: "command to create report",
+	Long: `command to pull log from backend storage and create report file from it
+	USAGE
+	gathernupload report [FLAGS]
+	
+	FLAGS
+	-f, --format, file format type for output (json, html, pdf)
+	-o, --output-dir, path/to/destination where report file will be saved
+	--log-bucket, log bucket name in backend storage
+	
+	DEPENDENCIES
+	wkhtmltopdf, https://wkhtmltopdf.org/`,
+
 	Run: func(cmd *cobra.Command, args []string) {
 		var report Report
 		loc, _ := time.LoadLocation("Asia/Jakarta")
 		end := time.Now().In(loc)
 		start := end.Add(-24 * time.Hour)
 		outputList := []string{"json", "html", "pdf"}
-		output, _ := cmd.Flags().GetString("output")
+		output, _ := cmd.Flags().GetString("format")
 		outputdir, _ := cmd.Flags().GetString("output-dir")
 		bucketname, _ := cmd.Flags().GetString("log-bucket")
 		report.Created = end.Format("2006-01-02 15:04:05.000000")
@@ -47,54 +63,91 @@ var reportCmd = &cobra.Command{
 
 		objectList, err := getObjectList("", "", bucketname, start, end)
 		if err != nil {
-			log.Errorf("error : %w", err)
+			log.Errorf("error : %v", err)
 		}
 
 		eventList, err := getEventLogList(objectList, bucketname)
 		if err != nil {
-			log.Errorf("error : %w", err)
+			log.Errorf("error : %v", err)
 		}
 
 		report.EventList = eventList
 
 		err = createReport(output, outputdir, report, end)
 		if err != nil {
-			log.Errorf("error : %w", err)
+			log.Errorf("error : %v", err)
 		}
 	},
 }
 
 func createReport(output string, outputDir string, report Report, now time.Time) error {
-	var err error
 	switch output {
 	case "json":
 		file, err := json.MarshalIndent(report, "", "")
 		if err != nil {
+			log.Errorf("json : %v", err)
 			return err
 		}
 
 		err = write(outputDir, file, now, output)
 		if err != nil {
+			log.Errorf("json : %v", err)
 			return err
 		}
 
 	case "html":
 		var rendered bytes.Buffer
-		template, err := template.New("html").Parse(content_template)
+		template, err := template.New("html").Parse(html_template)
 		if err != nil {
-			log.Errorf("error : %w", err)
+			log.Errorf("html : %v", err)
+			return err
 		}
 		template.ExecuteTemplate(&rendered, "log", report)
 
 		err = write(outputDir, rendered.Bytes(), now, output)
 		if err != nil {
+			log.Errorf("html : %v", err)
 			return err
 		}
 
 	case "pdf":
+		errIsDirectoryMsg := "open " + filepath.Join(outputDir) + ": is a directory"
+		pdfg, err := wkhtmltopdf.NewPDFGenerator()
+		if err != nil {
+			log.Errorf("pdf : %v", err)
+			return err
+		}
+
+		var rendered bytes.Buffer
+		template, err := template.New("pdf").Parse(pdf_template)
+		if err != nil {
+			log.Errorf("pdf : %v", err)
+			return err
+		}
+		template.ExecuteTemplate(&rendered, "log", report)
+
+		pdfg.AddPage(wkhtmltopdf.NewPageReader(&rendered))
+
+		pdfg.Orientation.Set(wkhtmltopdf.OrientationPortrait)
+		pdfg.Dpi.Set(300)
+
+		err = pdfg.Create()
+		if err != nil {
+			return err
+		}
+
+		err = pdfg.WriteFile(outputDir)
+		if err != nil {
+			if err.Error() == errIsDirectoryMsg {
+				newPath := filepath.Join(outputDir, now.Format("2006-01-02 15:04:05.000000"+"."+output))
+				pdfg.WriteFile(newPath)
+			} else {
+				return err
+			}
+		}
 	}
 
-	return err
+	return nil
 }
 
 func write(outputDir string, data []byte, now time.Time, output string) error {
@@ -111,7 +164,7 @@ func write(outputDir string, data []byte, now time.Time, output string) error {
 		}
 	}
 
-	return err
+	return nil
 }
 
 func getObjectList(prefix string, delim string, bucket string, start time.Time, end time.Time) ([]string, error) {
@@ -188,8 +241,8 @@ func getEventLogList(objectList []string, bucket string) ([]EventLog, error) {
 func init() {
 	rootCmd.AddCommand(reportCmd)
 
-	reportCmd.Flags().StringP("output", "o", "json", "output type [json, html, pdf]")
-	reportCmd.Flags().StringP("output-dir", "", ".", "path to directory")
+	reportCmd.Flags().StringP("format", "f", "json", "output type [json, html, pdf]")
+	reportCmd.Flags().StringP("output-dir", "o", ".", "path to directory")
 	reportCmd.Flags().StringP("log-bucket", "", "", "log bucket name")
 
 	reportCmd.MarkFlagRequired("log-bucket")
