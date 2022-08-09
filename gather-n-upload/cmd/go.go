@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/sigstore/cosign/cmd/cosign/cli/generate"
@@ -156,11 +159,22 @@ var goCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		if output != "" {
+			folderPath := fmt.Sprintf("%s_artifacts/Charts/templates/*", id)
+			destination := filepath.Join(flags.output, id)
+			copyFolder(folderPath, destination)
+		}
+
 		if flags.rm {
 			os.Remove("cosign.key")
 			os.Remove("cosign.pub")
 		}
 	},
+}
+
+func copyFolder(folderPath string, destination string) {
+	cmd := exec.Command("cp", "--recursive", folderPath, destination)
+	cmd.Run()
 }
 
 func randStringBytes(n int) string {
