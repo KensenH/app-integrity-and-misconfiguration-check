@@ -27,6 +27,7 @@ type FlagsInput struct {
 	privateKey                 string
 	publicKey                  string
 	rm                         bool
+	output                     string
 }
 
 // goCmd represents the go command
@@ -83,6 +84,7 @@ var goCmd = &cobra.Command{
 		privateKey, _ := cmd.Flags().GetString("private-key")
 		publicKey, _ := cmd.Flags().GetString("public-key")
 		rm, _ := cmd.Flags().GetBool("rm")
+		output, _ := cmd.Flags().GetString("output")
 
 		var flags FlagsInput
 		config, _ := cmd.Flags().GetString("config")
@@ -99,11 +101,11 @@ var goCmd = &cobra.Command{
 				log.Errorf("reading config failed : %t", err)
 				os.Exit(1)
 			}
-			flags = FlagsInput{chartsPath, cfg.Scanner.OwaspDependencyCheckScan, cfg.Scanner.OwaspDependencyCheckOutput, cfg.Scanner.KubesecScan, cfg.Scanner.KubesecOutput, cfg.BackendStorage.ArtifactsBucketName, cfg.BackendStorage.PublicKeysBucketName, cfg.Key.PrivateKey, cfg.Key.PublicKey, cfg.Script.Rm}
+			flags = FlagsInput{chartsPath, cfg.Scanner.OwaspDependencyCheckScan, cfg.Scanner.OwaspDependencyCheckOutput, cfg.Scanner.KubesecScan, cfg.Scanner.KubesecOutput, cfg.BackendStorage.ArtifactsBucketName, cfg.BackendStorage.PublicKeysBucketName, cfg.Key.PrivateKey, cfg.Key.PublicKey, cfg.Script.Rm, cfg.Output}
 		} else {
 			log.Infof("not config\n")
 			//move all flags inputted to struct
-			flags = FlagsInput{chartsPath, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput, artifactsBucketName, publicKeysBucketName, privateKey, publicKey, rm}
+			flags = FlagsInput{chartsPath, owaspDependencyCheckScan, owaspDependencyCheckOutput, kubesecScan, kubesecOutput, artifactsBucketName, publicKeysBucketName, privateKey, publicKey, rm, output}
 		}
 
 		//check if charts directory inputted is exist
@@ -200,6 +202,7 @@ func init() {
 	goCmd.Flags().StringP("private-key", "", "", "private key path")
 	goCmd.Flags().StringP("public-key", "", "", "private key path")
 	goCmd.Flags().StringP("config", "c", "", "path to config")
+	goCmd.Flags().StringP("output", "o", "", "output")
 
 	// goCmd.MarkFlagRequired("public-keys-bucket-name")
 	// goCmd.MarkFlagRequired("artifacts-bucket-name")

@@ -5,6 +5,7 @@ type Config struct {
 	BackendStorage BackendStorage `yaml:"backendStorage"`
 	Scanner        Scanner        `yaml:"scanner"`
 	Script         Script         `yaml:"script"`
+	Output         string
 }
 type Key struct {
 	PrivateKey string `yaml:"private-key"`
