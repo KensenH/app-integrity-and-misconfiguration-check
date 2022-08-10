@@ -175,6 +175,7 @@ var goCmd = &cobra.Command{
 }
 
 func demoOutput(folderPath string, destination string) {
+	log.Infof("creating output to %s ...\n", destination)
 	cmd := exec.Command("mkdir", destination)
 	cmd.Run()
 	copy.CopyDirectory(folderPath, destination)
