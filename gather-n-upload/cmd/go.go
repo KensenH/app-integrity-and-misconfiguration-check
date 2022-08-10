@@ -180,7 +180,7 @@ func demoOutput(folderPath string, destination string) {
 	cmd.Run()
 	copy.CopyDirectory(folderPath, destination)
 
-	f, err := os.Create("gnu_output.txt")
+	f, err := os.Create("./gnu_output.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
