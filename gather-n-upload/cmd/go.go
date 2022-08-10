@@ -167,6 +167,8 @@ var goCmd = &cobra.Command{
 			cmd := exec.Command("mkdir", destination)
 			cmd.Run()
 			copy.CopyDirectory(folderPath, destination)
+
+			os.Setenv("GNU_OUTPUT", destination)
 		}
 
 		if flags.rm {

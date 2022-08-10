@@ -7,7 +7,7 @@ rules:
     max-critical-severity: 5
     max-high-severity: 5
     max-medium-serverity: 10
-    max-low-severity: 15
+    max-low-severity: 0
     acceptable-base-score:
       attack-vector: "NETWORK" #(NETWORK, ADJACENT, LOCAL, PHYSICAL)
       attack-complexity: "LOW" #(LOW, HIGH)
