@@ -164,11 +164,7 @@ var goCmd = &cobra.Command{
 		if output != "" {
 			folderPath := fmt.Sprintf("%s_artifacts/Charts/templates", id)
 			destination := filepath.Join(flags.output, id)
-			cmd := exec.Command("mkdir", destination)
-			cmd.Run()
-			copy.CopyDirectory(folderPath, destination)
-
-			os.Setenv("GNU_OUTPUT", destination)
+			demoOutput(folderPath, destination)
 		}
 
 		if flags.rm {
@@ -176,6 +172,25 @@ var goCmd = &cobra.Command{
 			os.Remove("cosign.pub")
 		}
 	},
+}
+
+func demoOutput(folderPath string, destination string) {
+	cmd := exec.Command("mkdir", destination)
+	cmd.Run()
+	copy.CopyDirectory(folderPath, destination)
+
+	f, err := os.Create("gnu_output.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer f.Close()
+
+	_, err2 := f.WriteString(destination)
+
+	if err2 != nil {
+		log.Fatal(err2)
+	}
 }
 
 func randStringBytes(n int) string {
