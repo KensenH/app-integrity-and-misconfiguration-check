@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -163,6 +164,8 @@ var goCmd = &cobra.Command{
 		if output != "" {
 			folderPath := fmt.Sprintf("%s_artifacts/Charts/templates", id)
 			destination := filepath.Join(flags.output, id)
+			cmd := exec.Command("mkdir", destination)
+			cmd.Run()
 			copy.CopyDirectory(folderPath, destination)
 		}
 
