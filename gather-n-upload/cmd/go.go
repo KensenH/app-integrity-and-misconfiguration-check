@@ -173,8 +173,9 @@ var goCmd = &cobra.Command{
 }
 
 func copyFolder(folderPath string, destination string) {
-	fmt.Println(folderPath)	
-	fmt.Println(destination)
+	cmd := exec.Command("mkdir", destination)
+
+	
 	cmd := exec.Command("cp", "--recursive", folderPath, destination)
 	cmd.Run()	
 }	
