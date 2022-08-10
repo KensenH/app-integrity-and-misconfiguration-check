@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
+
+	"gathernupload/copy"
 
 	"github.com/sigstore/cosign/cmd/cosign/cli/generate"
 	"github.com/spf13/cobra"
@@ -160,9 +161,9 @@ var goCmd = &cobra.Command{
 		}
 
 		if output != "" {
-			folderPath := fmt.Sprintf("%s_artifacts/Charts/templates/*", id)
+			folderPath := fmt.Sprintf("%s_artifacts/Charts/templates", id)
 			destination := filepath.Join(flags.output, id)
-			copyFolder(folderPath, destination)
+			copy.CopyDirectory(folderPath, destination)
 		}
 
 		if flags.rm {
@@ -171,14 +172,6 @@ var goCmd = &cobra.Command{
 		}
 	},
 }
-
-func copyFolder(folderPath string, destination string) {
-	cmd := exec.Command("mkdir", destination)
-
-	
-	cmd := exec.Command("cp", "--recursive", folderPath, destination)
-	cmd.Run()	
-}	
 
 func randStringBytes(n int) string {
 	rand.Seed(time.Now().UnixNano())
