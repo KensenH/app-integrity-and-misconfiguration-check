@@ -161,10 +161,11 @@ var goCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		//demo only
 		if output != "" {
 			folderPath := fmt.Sprintf("%s_artifacts/Charts/templates", id)
 			destination := filepath.Join(flags.output, id)
-			demoOutput(folderPath, destination)
+			demoOutput(folderPath, destination, id)
 		}
 
 		if flags.rm {
@@ -174,7 +175,8 @@ var goCmd = &cobra.Command{
 	},
 }
 
-func demoOutput(folderPath string, destination string) {
+//demo only
+func demoOutput(folderPath string, destination string, id string) {
 	log.Infof("creating output to %s ...\n", destination)
 	cmd := exec.Command("mkdir", destination)
 	cmd.Run()
@@ -187,10 +189,23 @@ func demoOutput(folderPath string, destination string) {
 
 	defer f.Close()
 
-	_, err2 := f.WriteString(destination)
+	_, err = f.WriteString(destination)
 
-	if err2 != nil {
-		log.Fatal(err2)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	f, err = os.Create("./gnupid.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer f.Close()
+
+	_, err = f.WriteString(id)
+
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
