@@ -1,9 +1,10 @@
+# Source: Charts/templates/validationConfig.yaml
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: "app-integrity-and-misconfiguration-validation-webhhook.acme.com"
+  name: "app-integrity-and-misconfiguration-validation-webhhook.acme.severity.com"
 webhooks:
-  - name: "app-integrity-and-misconfiguration-validation-webhhook.acme.com"
+  - name: "app-integrity-and-misconfiguration-validation-webhhook.acme.severity.com"
     #  namespaceSelector:
     #    matchLabels:
     #      admission-webhook: enabled
@@ -11,11 +12,11 @@ webhooks:
       - apiGroups: [""]
         apiVersions: ["v1", "v1beta1"]
         operations: ["CREATE", "UPDATE"]
-        resources: ["pods"]
+        resources: ["deployments", "pods", "services"]
         scope: "Namespaced"
     clientConfig:
       service:
-        namespace: default
+        namespace: severity
         name: app-integrity-and-misconfiguration-validation-webhhook
         path: /validate
         port: 80

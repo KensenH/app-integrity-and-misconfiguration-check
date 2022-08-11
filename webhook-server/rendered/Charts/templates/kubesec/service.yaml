@@ -1,0 +1,13 @@
+# Source: Charts/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-integrity-and-misconfiguration-validation-webhhook
+  namespace: kubesec
+spec:
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 443
+  selector:
+    app: app-integrity-and-misconfiguration-validation-webhhook

@@ -161,7 +161,7 @@ var goCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		//demo only
+		//for demo purpose only
 		if output != "" {
 			folderPath := fmt.Sprintf("%s_artifacts/Charts/templates", id)
 			destination := filepath.Join(flags.output, id)
@@ -175,7 +175,7 @@ var goCmd = &cobra.Command{
 	},
 }
 
-//demo only
+//for demo purpose only
 func demoOutput(folderPath string, destination string, id string) {
 	log.Infof("creating output to %s ...\n", destination)
 	cmd := exec.Command("mkdir", destination)

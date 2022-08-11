@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: golang-fishy
+  namespace: kubesec
+  annotations:
+    cosign.sigstore.dev/message: H4sIAAAAAAAA/wB6AYX+H4sIAAAAAAAA/+yTzY7TQBCEffZT9As4bjv+2Z0zXBASSEhInFDvuHGGzJ9mOiuFp0cmIQRkhJYLrJTvUvJPVU3bM7W4WOvgYuKcjZ8roVTNX9r+vuuxG7CvJ442HB172RzJ2eLpICIOXfdNm6E56XjShbFriqZrxx6bLQ5DgW07tn0B+BddT+aQhVKB+Jn93vj82/f+9Pw8y0WfCRTNe07ZBK+AYsz1Y1PujZ8UvLj899Kx0ERCqgQg74OQmODzcgkw+0OszKTgcRdfjdLPzZuXH96Z9PGXjVMCWHpge7ZRjArmYMnP1SeTd8cSwJPj1Zs5kmYF+8MDZ9ZljqyXlMTRGk1ZQVMCZLasJaRTviPRu9dXheuVwi5aEj6brgZdsD/51xMAvi9nQQcvZDyni6sC42he5tJpY0JNSe94qiz7XG377XLErhMVbnAz3l8qV7/JiRiSXC2u+lH+NiRRcId3WP7rDXbjxo3/lq8BAAD//98a2BkACAAAAQAA//8L7/+GegEAAA==
+    cosign.sigstore.dev/signature: MEUCIHEy1XWI34/4p6IQGmvjmn1EFJddxjwzKOmDDISTQTVEAiEAq0BAP1a10KvQHyGg5iB3F1EbuBfAtFKwQk9CATnAfoE=
+    gnup-id: vhpJ7t5g1OEYSir_deployment.yaml
+  labels:
+    app: golang-fishy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: golang-fishy
+  template:
+    metadata:
+      labels:
+        app: golang-fishy
+    spec:
+      containers:
+      - image: gcr.io/arched-lens-353605/golang-fishy:0.0.79
+        name: golang-fishy
+        ports:
+        - containerPort: 8080

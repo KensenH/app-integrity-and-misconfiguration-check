@@ -1,10 +1,8 @@
----
 # Source: Charts/templates/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app-integrity-and-misconfiguration-validation-webhhook
-  namespace: default
 spec:
   replicas: 1
   selector:
@@ -16,7 +14,7 @@ spec:
         app: app-integrity-and-misconfiguration-validation-webhhook
     spec:
       containers:
-        - image: kensenh/simple-kubernetes-webhook:latest
+        - image: kensenh/simple-kubernetes-webhook:manifest-integrityv0.0.1
           name: app-integrity-and-misconfiguration-validation-webhhook
           imagePullPolicy: Always
           env:

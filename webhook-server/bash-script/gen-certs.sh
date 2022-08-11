@@ -19,7 +19,7 @@ openssl req -newkey rsa:2048 -nodes -keyout $fn/server.key \
   -out $fn/server.csr
 
 openssl x509 -req \
-  -extfile <(printf "subjectAltName=DNS:app-integrity-and-misconfiguration-validation-webhhook.default.svc") \
+  -extfile <(printf "subjectAltName=DNS:app-integrity-and-misconfiguration-validation-webhhook.severity.svc") \
   -days 365 \
   -in $fn/server.csr \
   -CA $fn/ca.crt -CAkey $fn/ca.key -CAcreateserial \

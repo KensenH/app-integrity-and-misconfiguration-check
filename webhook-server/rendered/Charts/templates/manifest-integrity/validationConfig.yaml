@@ -1,0 +1,48 @@
+# Source: Charts/templates/validationConfig.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: "app-integrity-and-misconfiguration-validation-webhhook.acme.manifest-integrity.com"
+webhooks:
+  - name: "app-integrity-and-misconfiguration-validation-webhhook.acme.manifest-integrity.com"
+    #  namespaceSelector:
+    #    matchLabels:
+    #      admission-webhook: enabled
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1", "v1beta1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "pods", "services"]
+        scope: "Namespaced"
+    clientConfig:
+      service:
+        namespace: manifest-integrity
+        name: app-integrity-and-misconfiguration-validation-webhhook
+        path: /validate
+        port: 80
+      caBundle: |-
+        LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURTVENDQWpHZ0F3SUJBZ0lVWXpoUFR3bDBa
+        YmxnSEdOYlJ3V051TmxZMFdJd0RRWUpLb1pJaHZjTkFRRUwKQlFBd05ERUxNQWtHQTFVRUJoTUNR
+        VlV4SlRBakJnTlZCQU1NSEdGa2JXbHpjMmx2YmkxamIyNTBjbTlzYkdWeQpMWGRsWW1odmIyc3dI
+        aGNOTWpJd09ERXhNRFExTlRNeFdoY05Nak13T0RFeE1EUTFOVE14V2pBME1Rc3dDUVlEClZRUUdF
+        d0pCVlRFbE1DTUdBMVVFQXd3Y1lXUnRhWE56YVc5dUxXTnZiblJ5YjJ4c1pYSXRkMlZpYUc5dmF6
+        Q0MKQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFMWXI2SUZzWGJPMjdS
+        TmpkZGVYTDBRWgoxTGg5OHZIM1FNbzc0YjdlMWtZTzJuc0VuOXB5aTZwQTFMUjkwUFhiTHNtcFp4
+        b2ZWek9kOGtQT1lqUzR6U1BFClM1RURnKzVWNlhkK1J3bTRoUzdFak1mZ1Boa0JvRTdhSGlrdXhC
+        Q2JyVFptci9oYkc3RlNrUlRuUTJwSmdKNVYKWnlGUjNVNlpCWmRZVE5OdFYxOUthNEhQN2Rtazdn
+        clBoKzRoSGRuV0R0eTZub3B5aWNnb0tEb0dlTXVJb2hnWAplZnJ6b29XWHNlclBZak81ZXVnOWEv
+        Y0RUMWxsUTZsVlVxUjBJdTJub2ZHV2ZnTEZQcExFbzRpQXZzRlI2Y1ZGCmF6bUpxaTdldk9JSVFK
+        elZaM0xhTnVucmYwMlFXSE1xQlg0MjRzRWZCdGgwQ0haUXZBZ1MwK1ZCWEl5MitNa0MKQXdFQUFh
+        TlRNRkV3SFFZRFZSME9CQllFRkRNOVZTbytLRXhGelRIR1Fiamd3cDVGSXEvMU1COEdBMVVkSXdR
+        WQpNQmFBRkRNOVZTbytLRXhGelRIR1Fiamd3cDVGSXEvMU1BOEdBMVVkRXdFQi93UUZNQU1CQWY4
+        d0RRWUpLb1pJCmh2Y05BUUVMQlFBRGdnRUJBRWZMRHAwMElMRDdmL051VXBiWEJGMTRqQnBiNmNl
+        cjV3V0V6M2U1aVVEOERvOUMKa0RrZ0tkOUVnd1dFbHRmanE3eFdZVGpqS0ZGMWF6ZGpZVGxxUXdG
+        TnlVZUZ2T0RuVU9pTm5LeW1xSzZMbXVQdgpEY1FNZU5NUEtnaE5RMkVrR0xxcm1Wai9oajh1RnVD
+        ZGt0ckhiNFlKWWE3TVYxNlNVT2hHdDg4Z1A2UHRQaGhiCitYQUwvRVlSMU9UbFFwVFlnMFkzSWl2
+        cjYxU2JrWHBMVGdSSmM3UFRrR3A3QkZpdmp5RXdaTjQ1dUdPVGNGYnQKOFhaZHp1NTF4eFVWRVl6
+        dGVVMklZc1BBdzA2d1VjRTl3QjdhNktyM1EvM3FXbUxXYktGS2lDWGdmd2ROYXMxcwpKM2pReVQz
+        czJYWis1Ry82M2U2RXpxY3lhQ1Zlam02dHR0MGcyZXM9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0t
+        LS0K
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: NoneOnDryRun
+    timeoutSeconds: 30

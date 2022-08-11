@@ -4,10 +4,10 @@ backendStorage:
   log-bucket-name: "event-log"
 rules:
   owasp-dependency-check:
-    max-critical-severity: 5
-    max-high-severity: 5
-    max-medium-serverity: 10
-    max-low-severity: 0
+    max-critical-severity: 100
+    max-high-severity: 0
+    max-medium-serverity: 100
+    max-low-severity: 100
     acceptable-base-score:
       attack-vector: "NETWORK" #(NETWORK, ADJACENT, LOCAL, PHYSICAL)
       attack-complexity: "LOW" #(LOW, HIGH)
@@ -20,4 +20,4 @@ rules:
   kubesec:
     min-score: 0
 namespaceRestricted:
-  - default
+  - severity

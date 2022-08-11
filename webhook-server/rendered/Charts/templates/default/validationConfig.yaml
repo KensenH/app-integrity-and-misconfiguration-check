@@ -13,11 +13,11 @@ webhooks:
       - apiGroups: [""]
         apiVersions: ["v1", "v1beta1"]
         operations: ["CREATE", "UPDATE"]
-        resources: ["pods"]
+        resources: ["deployment", "pods", "service"]
         scope: "Namespaced"
     clientConfig:
       service:
-        namespace: default
+        namespace: kubesec
         name: app-integrity-and-misconfiguration-validation-webhhook
         path: /validate
         port: 80
